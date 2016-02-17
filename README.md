@@ -127,6 +127,11 @@ We encourage submissions to this list! Tutorials, libraries, articles, blog post
    - [Java 8 API spec](http://docs.oracle.com/javase/8/docs/api/)
  - [Scala](http://scala-lang.org/)
    - [Learn](http://scala-lang.org/documentation/)
+ - [C#](https://msdn.microsoft.com/en-us/library/kx37x362.aspx?f=255&MSPPError=-2147217396)
+   - [C# 6.0 and the .NET 4.6 Framework by Andrew Troelsen (free pdf-version for NTNU students)](http://link.springer.com/book/10.1007/978-1-4842-1332-2)
+   - [Mono (.NET on Linux)](http://www.mono-project.com/docs/)
+   - [Introduction to Socket Programming with C#](http://www.codeproject.com/Articles/10649/An-Introduction-to-Socket-Programming-in-NET-using)
+   - Importing native libraries: [general](http://www.codeproject.com/Articles/403285/P-Invoke-Tutorial-Basics-Part) and [for Linux](http://www.mono-project.com/docs/advanced/pinvoke/)
 
 <!-- -->
  
