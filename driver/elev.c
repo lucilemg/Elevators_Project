@@ -116,11 +116,7 @@ int elev_get_button_signal(elev_button_type_t button, int floor) {
     assert(button < N_BUTTONS);
 
 
-    if (io_read_bit(button_channel_matrix[floor][button])) {
-        return 1;
-    } else {
-        return 0;
-    }    
+    return io_read_bit(button_channel_matrix[floor][button]);
 }
 
 
