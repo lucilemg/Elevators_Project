@@ -27,7 +27,7 @@ static void __attribute__((constructor)) elev_init(void){
     ElevatorType et;
 
     con_load("elevator.con",
-        con_enum("elevatorType", et,
+        con_enum("elevatorType", &et,
             con_match(ET_simulation)
             con_match(ET_comedi)
         )
@@ -119,11 +119,7 @@ static int elev_read_requestButton(int floor, Button button){
     assert(floor < N_FLOORS);
     assert(button < N_BUTTONS);
 
-    if(io_read_bit(buttonChannels[floor][button])){
-        return 1;
-    } else {
-        return 0;
-    }
+    return io_read_bit(buttonChannels[floor][button]);
 }
 
 

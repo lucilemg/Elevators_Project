@@ -17,8 +17,8 @@ static void __attribute__((constructor)) fsm_init(){
     elevator = elevator_uninitialized();
     
     con_load("elevator.con",
-        con_val("doorOpenDuration_s", elevator.config.doorOpenDuration_s, "%lf")
-        con_enum("clearRequestVariant", elevator.config.clearRequestVariant,
+        con_val("doorOpenDuration_s", &elevator.config.doorOpenDuration_s, "%lf")
+        con_enum("clearRequestVariant", &elevator.config.clearRequestVariant,
             con_match(CV_All)
             con_match(CV_InDirn)
         )

@@ -14,7 +14,7 @@ int main(void){
     
     int inputPollRate_ms = 25;
     con_load("elevator.con",
-        con_val("inputPollRate_ms", inputPollRate_ms, "%d")
+        con_val("inputPollRate_ms", &inputPollRate_ms, "%d")
     )
     
     ElevInputDevice input = elevio_getInputDevice();    
