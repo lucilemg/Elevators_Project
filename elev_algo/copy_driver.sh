@@ -1,3 +1,8 @@
 mkdir -p driver;
-cp ../simulator/source/* driver;
-mv driver/simulator.con .;
+cp ../driver/io.c driver;
+cp ../driver/io.h driver;
+cp ../driver/channels.h driver;
+
+mkdir -p sim_server;
+cp ../simulator_2/server/* sim_server;
+cp ../simulator_2/simulator.con .;

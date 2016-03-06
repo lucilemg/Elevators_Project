@@ -3,6 +3,9 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <stdio.h>
 
 #include "con_load.h"
 #include "driver/channels.h"
@@ -20,31 +23,69 @@ static void elev_write_doorLight(int value);
 static void elev_write_stopButtonLight(int value);
 static void elev_write_motorDirection(Dirn dirn);
 
+typedef enum {
+    ET_Comedi,
+    ET_Simulation
+} ElevatorType;
 
+static ElevatorType et = ET_Simulation;
+static int sockfd;
 
 static void __attribute__((constructor)) elev_init(void){
 
-    ElevatorType et;
-
     con_load("elevator.con",
         con_enum("elevatorType", &et,
-            con_match(ET_simulation)
-            con_match(ET_comedi)
+            con_match(ET_Simulation)
+            con_match(ET_Comedi)
         )
     )
+    
+    switch(et) {
+    case ET_Comedi:
+        ;
+        int success = io_init();
+        assert(success && "Elevator hardware initialization failed");
 
-    int success = io_init(et);
-    assert(success && "Elevator hardware initialization failed");
-
-    for(int floor = 0; floor < N_FLOORS; floor++) {
-        for(Button btn = 0; btn < N_BUTTONS; btn++){
-            elev_write_requestButtonLight(floor, btn, 0);
+        for(int floor = 0; floor < N_FLOORS; floor++) {
+            for(Button btn = 0; btn < N_BUTTONS; btn++){
+                elev_write_requestButtonLight(floor, btn, 0);
+            }
         }
-    }
 
-    elev_write_stopButtonLight(0);
-    elev_write_doorLight(0);
-    elev_write_floorIndicator(0);
+        elev_write_stopButtonLight(0);
+        elev_write_doorLight(0);
+        elev_write_floorIndicator(0);
+        break;
+
+    case ET_Simulation:
+        ;
+        char ip[16] = {0};
+        char port[8] = {0};
+        con_load("simulator.con",
+            con_val("com_ip",   ip,   "%s")
+            con_val("com_port", port, "%s")
+        )
+    
+        sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        assert(sockfd != -1 && "Unable to set up socket");
+
+        struct addrinfo hints = {
+            .ai_family      = AF_UNSPEC, 
+            .ai_socktype    = SOCK_STREAM, 
+            .ai_protocol    = IPPROTO_TCP,
+        };
+        struct addrinfo* res;
+        getaddrinfo(ip, port, &hints, &res);
+
+        int fail = connect(sockfd, res->ai_addr, res->ai_addrlen);
+        assert(fail == 0 && "Unable to connect to simulator backend");
+
+        freeaddrinfo(res);
+
+        send(sockfd, (char[4]){0}, 4, 0);
+
+        break;
+    }
 }
 
 
@@ -98,12 +139,21 @@ static const int floorSensorChannels[N_FLOORS] = {
 };
 
 static int elev_read_floorSensor(void){
-    for(int f = 0; f < N_FLOORS; f++){
-        if(io_read_bit(floorSensorChannels[f])){
-            return f;
+    switch(et) {
+    case ET_Comedi:
+        for(int f = 0; f < N_FLOORS; f++){
+            if(io_read_bit(floorSensorChannels[f])){
+                return f;
+            }
         }
+        return -1;
+    case ET_Simulation:
+        send(sockfd, (char[4]){7}, 4, 0);
+        unsigned char buf[4];
+        recv(sockfd, buf, 4, 0);
+        return buf[1] ? buf[2] : -1;
     }
-    return -1;
+    return -2;
 }
 
 
@@ -115,21 +165,49 @@ static const int buttonChannels[N_FLOORS][N_BUTTONS] = {
 };
 
 static int elev_read_requestButton(int floor, Button button){
-    assert(floor >= 0);
-    assert(floor < N_FLOORS);
-    assert(button < N_BUTTONS);
+    switch(et) {
+    case ET_Comedi:
+        assert(floor >= 0);
+        assert(floor < N_FLOORS);
+        assert(button >= 0);
+        assert(button < N_BUTTONS);
 
-    return io_read_bit(buttonChannels[floor][button]);
+        return io_read_bit(buttonChannels[floor][button]);
+    case ET_Simulation:
+        send(sockfd, (char[4]){6, button, floor}, 4, 0);
+        char buf[4];
+        recv(sockfd, buf, 4, 0);
+        return buf[1];
+    }
+    return 0;
 }
 
 
 static int elev_read_stopButton(void){
-    return io_read_bit(STOP);
+    switch(et) {
+    case ET_Comedi:
+        return io_read_bit(STOP);
+    case ET_Simulation:
+        send(sockfd, (char[4]){8}, 4, 0);
+        char buf[4];
+        recv(sockfd, buf, 4, 0);
+        return buf[1];
+    }
+    return 0;
 }
 
 
 static int elev_read_obstruction(void){
-    return io_read_bit(OBSTRUCTION);
+    switch(et) {
+    case ET_Comedi:
+        return io_read_bit(OBSTRUCTION);
+    case ET_Simulation:
+        send(sockfd, (char[4]){9}, 4, 0);
+        char buf[4];
+        recv(sockfd, buf, 4, 0);
+        return buf[1];
+    }
+    return 0;
 }
 
 
@@ -137,19 +215,26 @@ static int elev_read_obstruction(void){
 
 
 static void elev_write_floorIndicator(int floor){
-    assert(floor >= 0);
-    assert(floor < N_FLOORS);
+    switch(et) {
+    case ET_Comedi:
+        assert(floor >= 0);
+        assert(floor < N_FLOORS);
 
-    if(floor & 0x02){
-        io_set_bit(LIGHT_FLOOR_IND1);
-    } else {
-        io_clear_bit(LIGHT_FLOOR_IND1);
-    }
+        if(floor & 0x02){
+            io_set_bit(LIGHT_FLOOR_IND1);
+        } else {
+            io_clear_bit(LIGHT_FLOOR_IND1);
+        }
 
-    if(floor & 0x01){
-        io_set_bit(LIGHT_FLOOR_IND2);
-    } else {
-        io_clear_bit(LIGHT_FLOOR_IND2);
+        if(floor & 0x01){
+            io_set_bit(LIGHT_FLOOR_IND2);
+        } else {
+            io_clear_bit(LIGHT_FLOOR_IND2);
+        }
+        break;
+    case ET_Simulation:
+        send(sockfd, (char[4]){3, floor}, 4, 0);
+        break;
     }
 }
 
@@ -162,49 +247,79 @@ static const int buttonLightChannels[N_FLOORS][N_BUTTONS] = {
 };
 
 static void elev_write_requestButtonLight(int floor, Button button, int value){
-    assert(floor >= 0);
-    assert(floor < N_FLOORS);
-    assert(button < N_BUTTONS);
+    switch(et) {
+    case ET_Comedi:
+        assert(floor >= 0);
+        assert(floor < N_FLOORS);
+        assert(button >= 0);
+        assert(button < N_BUTTONS);
 
-    if(value){
-        io_set_bit(buttonLightChannels[floor][button]);
-    } else {
-        io_clear_bit(buttonLightChannels[floor][button]);
+        if(value){
+            io_set_bit(buttonLightChannels[floor][button]);
+        } else {
+            io_clear_bit(buttonLightChannels[floor][button]);
+        }
+
+        break;
+    case ET_Simulation:
+        send(sockfd, (char[4]){2, button, floor, value}, 4, 0);
+        break;
     }
 }
 
 
 static void elev_write_doorLight(int value){
-    if(value){
-        io_set_bit(LIGHT_DOOR_OPEN);
-    } else {
-        io_clear_bit(LIGHT_DOOR_OPEN);
+    switch(et) {
+    case ET_Comedi:
+        if(value){
+            io_set_bit(LIGHT_DOOR_OPEN);
+        } else {
+            io_clear_bit(LIGHT_DOOR_OPEN);
+        }
+        break;
+    case ET_Simulation:
+        send(sockfd, (char[4]){4, value}, 4, 0);
+        break;
     }
 }
 
 
 static void elev_write_stopButtonLight(int value){
-    if(value){
-        io_set_bit(LIGHT_STOP);
-    } else {
-        io_clear_bit(LIGHT_STOP);
+    switch(et) {
+    case ET_Comedi:
+        if(value){
+            io_set_bit(LIGHT_STOP);
+        } else {
+            io_clear_bit(LIGHT_STOP);
+        }
+        break;
+    case ET_Simulation:
+        send(sockfd, (char[4]){5, value}, 4, 0);
+        break;
     }
 }
 
 
 static void elev_write_motorDirection(Dirn dirn){
-    switch(dirn){
-    case D_Up:
-        io_clear_bit(MOTORDIR);
-        io_write_analog(MOTOR, 2800);
+    switch(et) {
+    case ET_Comedi:
+        switch(dirn){
+        case D_Up:
+            io_clear_bit(MOTORDIR);
+            io_write_analog(MOTOR, 2800);
+            break;
+        case D_Down:
+            io_set_bit(MOTORDIR);
+            io_write_analog(MOTOR, 2800);
+            break;
+        case D_Stop:
+        default:
+            io_write_analog(MOTOR, 0);
+            break;
+        }
         break;
-    case D_Down:
-        io_set_bit(MOTORDIR);
-        io_write_analog(MOTOR, 2800);
-        break;
-    case D_Stop:
-    default:
-        io_write_analog(MOTOR, 0);
+    case ET_Simulation:
+        send(sockfd, (char[4]){1, dirn}, 4, 0);
         break;
     }
 }
