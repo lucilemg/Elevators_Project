@@ -30,7 +30,7 @@ int main(void){
                 for(int b = 0; b < N_BUTTONS; b++){
                     int v = input.requestButton(f, b);
                     if(v  &&  v != prev[f][b]){
-                        fsm_onrequestButtonPress(f, b);
+                        fsm_onRequestButtonPress(f, b);
                     }
                     prev[f][b] = v;
                 }

@@ -41,7 +41,7 @@ void fsm_onInitBetweenFloors(void){
     elevator.behaviour = EB_Moving;
 }
 
-void fsm_onrequestButtonPress(int btn_floor, Button btn_type){
+void fsm_onRequestButtonPress(int btn_floor, Button btn_type){
     printf("\n\n%s(%d, %s)\n", __FUNCTION__, btn_floor, elevio_button_toString(btn_type));
     elevator_print(elevator);
     
