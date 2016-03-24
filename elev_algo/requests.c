@@ -25,13 +25,13 @@ static int requests_below(Elevator e){
 Dirn requests_chooseDirection(Elevator e){
     switch(e.dirn){
     case D_Up:
-        return  requests_above(e) ?  D_Up    :
-                requests_below(e) ?  D_Down  :
+        return  requests_above(e) ? D_Up    :
+                requests_below(e) ? D_Down  :
                                     D_Stop  ;
     case D_Down:
     case D_Stop: // there should only be one request in this case. Checking up or down first is arbitrary.
-        return  requests_below(e) ?  D_Down  :
-                requests_above(e) ?  D_Up    :
+        return  requests_below(e) ? D_Down  :
+                requests_above(e) ? D_Up    :
                                     D_Stop  ;
     default:
         return D_Stop;
