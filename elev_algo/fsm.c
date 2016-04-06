@@ -60,19 +60,16 @@ void fsm_onRequestButtonPress(int btn_floor, Button btn_type){
         break;
         
     case EB_Idle:
-        elevator.requests[btn_floor][btn_type] = 1;
-        
-        elevator.dirn = requests_chooseDirection(elevator);
-        
-        if(elevator.dirn == D_Stop){
+        if(elevator.floor == btn_floor){
             outputDevice.doorLight(1);
-            elevator = requests_clearAtCurrentFloor(elevator);
             timer_start(elevator.config.doorOpenDuration_s);
             elevator.behaviour = EB_DoorOpen;
         } else {
+            elevator.requests[btn_floor][btn_type] = 1;
+            elevator.dirn = requests_chooseDirection(elevator);
             outputDevice.motorDirection(elevator.dirn);
             elevator.behaviour = EB_Moving;
-        }    
+        }
         break;
         
     }
