@@ -78,6 +78,7 @@ Evaluation
    - The system is robust: It will always return to a fail-safe state where no orders are lost, regardless of any foreseen or unforeseen events
    - You have made conscious and reasoned decisions about network topology, module responsibilities, and other design issues
    - You understand any weaknesses your design has, and how they are (or could be) addressed
+   
    Diagrams and other visual aids are encouraged.
    
  - Code Review  
