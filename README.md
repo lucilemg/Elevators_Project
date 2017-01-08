@@ -161,23 +161,6 @@ Drivers
 Are found in the directory called [driver](driver)
 
 
-
-Objectives
--------
-
-To be able to evaluate your own progress you should set some objectives/milestones. Below we have suggested some objectives, but because of the large amount of freedom we are giving you, these will not necessarily apply well to your project. The important thing is that you make a plan and set some explicit goals, and make sure you don't fall behind.
-
-You should present your goals and progress to the student assistants each week, and they will offer their experiences and insights to help guide you down the right path.
-
-#####Week 8: Run a single elevator
-This could mean implementing the simple "elevator algorithm", or any other way of dispatching orders to a single elevator.
-
-#####Week 9: Network and communication
-Establish a network across multiple computers who are able to communicate with each other, using your chosen topology.
-
-#####Week 10: Cost function
-Create the decision/dispatch system for your elevators. Remember that you might be able to create a temporary version of this system (depending on how it's supposed to work) by creating a "bad" version first (like assigning a random elevator to a new order).
-
 Contact
 -------
 Any questions or suggestions to this text/the project in general?
