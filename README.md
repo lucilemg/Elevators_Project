@@ -79,16 +79,10 @@ Evaluation
    - You have made conscious and reasoned decisions about network topology, module responsibilities, and other design issues
    - You understand any weaknesses your design has, and how they are (or could be) addressed
    
-   Diagrams and other visual aids are encouraged.
+   A small hand-in containing diagrams and other visual aids should also be submitted. More details are yet to be determined.
    
  - Code Review  
-   This is a 15 minute session where you are in control of the keyboard, and you will be asked to navigate through your implementation. You will be evaluated on:
-   - Code quality: Well written, structured, easy to navigate, consistent, etc.
-   - If your code is idiomatic wrt. the language (Using the language the way it is supposed to be used)
-   - Maintainability: Separated into modules, APIs are complete, easy to swap out pieces of code
-   - The ease of adding any missing features (if any)
-   - Your ability to navigate and demonstrate understanding of your own code
-   
+   You will review other groups code, other groups will review your code and teachers will review your code. The practical details are yet to be determined.   
    
    
 Language resources
