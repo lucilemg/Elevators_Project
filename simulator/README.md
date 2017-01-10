@@ -7,15 +7,12 @@ The simulated elevator is a server which is intended to be run in its own window
 
 The server is written in D, so you will need a D compiler to run it. I recommend using the dmd compiler (since this is the only one I have tested it with), which you can get from [The D lang website](http://dlang.org/download.html#dmd).
 
-Main features in mkII:
+Main features:
  - 2 to 9 floors: Test the elevator with a different number of floors
  - Fully customizable controls: Dvorak and qwertz users rejoice!
  - Full-time manual motor override: Control the motor directly, simulating motor stop or unexpected movement.
  - Button hold: Hold down buttons by using uppercase letters.
  
-Regressions in mkII:
- - It is no longer possible to read the current value of the "outputs" (like the direction bit, lights, etc.)
-
 
 
 Usage
