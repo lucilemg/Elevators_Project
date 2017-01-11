@@ -1,5 +1,5 @@
 simulator.con
-ASDASD
+
 --travelTimeBetweenFloors_ms    2000
 --travelTimePassingFloor_ms     500
 --btnDepressedTime_ms           200
