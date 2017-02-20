@@ -1,5 +1,5 @@
 -module(network).
--export([init_conn/2,send_message/2,init_listener/2,read_mailbox/0,broadcast/2]).
+-export([init_conn/2,send_message/2,init_listener/2,read_mailbox/0,broadcast/1]).
 
 
 init_conn(_,5) ->
@@ -30,12 +30,14 @@ read_mailbox() ->
 send_message(PID, Message) ->
 	PID ! {msg, Message}.
 
-
-broadcast(_,0) -> io:format("Message sent to all registered nodes.~n");
-broadcast(Message, Element) ->
-	NthPid = global:whereis_name(lists:nth(Element,global:registered_names())),
-	send_message(NthPid, Message),
-	broadcast(Message, Element-1).
+broadcast(Message) ->
+	AllRegisteredNames = global:registered_names(),
+	%N = length(AllRegisteredNames),
+	%iterate_list(Element,Message,AllRegisteredNames).
+	lists:foreach(fun(N) -> 
+			NthPid = global:whereis_name(N),
+			send_message(NthPid, Message)
+			end, AllRegisteredNames).
 
 
 init_listener(Namelist, Element) ->
