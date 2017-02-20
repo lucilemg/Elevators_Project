@@ -1,6 +1,4 @@
 -module(main).
--behaviour(gen_statem).
-
 -export([main/0]).
 
 
