@@ -30,6 +30,7 @@ read_mailbox() ->
 send_message(PID, Message) ->
 	PID ! {msg, Message}.
 
+
 broadcast(Message) ->
 	AllRegisteredNames = global:registered_names(),
 	%N = length(AllRegisteredNames),
@@ -38,6 +39,13 @@ broadcast(Message) ->
 			NthPid = global:whereis_name(N),
 			send_message(NthPid, Message)
 			end, AllRegisteredNames).
+
+
+iterate_list(0,_,_) -> ok;
+iterate_list(Element, Message, AllRegisteredNames) ->
+		NthPid = global:whereis_name(lists:nth(Element,AllRegisteredNames)),
+		send_message(NthPid, Message),
+		iterate_list(Element-1,Message,AllRegisteredNames).
 
 
 init_listener(Namelist, Element) ->
