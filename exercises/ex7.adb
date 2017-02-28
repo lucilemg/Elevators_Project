@@ -21,7 +21,19 @@ procedure exercise7 is
             ------------------------------------------
             -- PART 3: Complete the exit protocol here
             ------------------------------------------
-            Put_Line("Part 3!");
+            if Finished'Count = N-1 then
+                if Aborted = False then
+                    Should_Commit := True;
+                elsif Aborted = True then
+                    Should_Commit := False;
+                end if;
+                Finished_Gate_Open := True;
+                
+            elsif Finished'Count = 0 then
+                Aborted := False;
+                Finished_Gate_Open := False;
+            end if;
+            
         end Finished;
 
         procedure Signal_Abort is
@@ -40,7 +52,7 @@ procedure exercise7 is
 
     
     function Unreliable_Slow_Add (x : Integer) return Integer is
-    Error_Rate : Constant := 0.15;  -- (between 0 and 1)
+    Error_Rate : Constant := 0.05;  -- (between 0 and 1)
     MyInt : Float := Random(Gen);
     begin
         -------------------------------------------
