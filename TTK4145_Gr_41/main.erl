@@ -10,9 +10,29 @@ main() ->
 
 	network:init_conn(ConnectionList,1),
 	network:init_listener(Namelist,1),
+	
+	LISTENER_PID = spawn (fun() -> general_listener([],[]) end),
 
-	FSM = fsm:start(),
-	elev_driver:start(FSM,elevator),
-	FSM ! hardware_initialized.
+	SCHEDULER_PID = scheduler:start(),
+	FSM_PID = fsm:start(SCHEDULER_PID),
+	elev_driver:start(SCHEDULER_PID,elevator).
 
 
+general_listener(CurrentOrders, CurrentStates) ->
+	% move to main?
+	receive 
+		{floor_reached, Floor} ->
+			%NewStates = CurrentStates,
+			ok,
+
+		{new_order, Direction, Floor} -> 
+			NewOrder = #orders{floor=Floor,direction=Direction},
+			NewOrders = CurrentOrders ++ [NewOrder],
+			io:format("Current orders: ~p~n",[NewOrders]),
+
+		{orders_wanted, SCHEDULER_PID} ->
+			cost_function(CurrentOrders, CurrentStates, SCHEDULER_PID),
+		{update_state, Dir, State, PID} ->
+			ok
+	end.
+	
