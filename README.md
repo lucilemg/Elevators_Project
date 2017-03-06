@@ -4,7 +4,6 @@ Elevator Project
 
 Summary
 -------
-Skjerp deg!!!
 Create software for controlling `n` elevators working in parallel across `m` floors.
 
 
