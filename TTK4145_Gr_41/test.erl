@@ -1,60 +1,55 @@
 -module(test).
 
--export([get/2]).
+-export([get_order/2,main/0]).
 -include("records.hrl").
 
 %-record (orders, {direction, floor, elevatorPID}).
 
-%get_c(#orders{clients = C, dbname = _D}) ->
-%     C.
 
-get(FSM_PID, CurrentFloor) ->
-	FirstOrder = #orders{direction=1,floor=1,elevatorPID = 1},
-	SecondOrder= #orders{direction=2,floor=2,elevatorPID = 2},
-	ThirdOrder= #orders{direction=1,floor=2,elevatorPID = 2},
+main() ->
+	Dasdo = get_order(2,2),
+	io:format("Order received: ~p~n",[Dasdo]).
 
+	
 
-	NextOrder = #orders{direction=0,floor =0, elevatorPID =0},
+get_order(FSM_PID, CurrentFloor) ->
+	
 
-	RecordList = [FirstOrder,SecondOrder,ThirdOrder],
-
-	%io:format("hei~n").
- 	%SortedOrders = get_sorted_orders(),
+ 	SortedOrders = get_sorted_orders(),
 	%CurrentFloor = get_floor(FSM_PID),
 
 	try lists:foreach(fun(N) -> 
 		case FSM_PID == N#orders.elevatorPID of
 			true ->
-				%NextOrder = N,
-				io:format("Order found~n"),
 				if 
 					CurrentFloor < N#orders.floor ->
-						io:format("up~n"),
-						up;
+						throw(order_up);
 					CurrentFloor > N#orders.floor ->
-						down;
+						throw(order_down);
 					CurrentFloor == N#orders.floor ->
-						open
-				end,
-				throw(order_found);
+						throw(open_doors)
+				end;
 			false ->
 
 				ok
 		end
-		end, RecordList)
-
+		end, SortedOrders)
 
 	catch
-		throw:order_found ->
-			if 
-				CurrentFloor < NextOrder#orders.floor ->
-					%up;
-					ok;
-				CurrentFloor > NextOrder#orders.floor ->
-					%down;
-					ok;
-				CurrentFloor == NextOrder#orders.floor ->
-					%open
-					ok
-			end
-	end.
+		throw:order_up ->
+			up;
+
+		throw:order_down ->
+			down;
+
+		throw:open_doors ->
+			open
+end.
+
+
+get_sorted_orders() ->
+	FirstOrder = #orders{direction=1,floor=1,elevatorPID = 1},
+	SecondOrder= #orders{direction=2,floor=1,elevatorPID = 2},
+	ThirdOrder= #orders{direction=1,floor=2,elevatorPID = 2},
+
+	RecordList = [FirstOrder,SecondOrder,ThirdOrder].

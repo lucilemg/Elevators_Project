@@ -48,7 +48,7 @@ foreach_button(FunctionForeachButton) ->
 %% Call backs
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 new_order(Listener, Direction, Floor) -> Listener ! {new_order, Direction, Floor}.
-floor_reached(Listener) -> Listener ! floor_reached.
+%floor_reached(Listener) -> Listener ! floor_reached.
 floor_reached(Listener, Floor) -> Listener ! {floor_reached, Floor}.
 
 %% Process functions
@@ -62,7 +62,6 @@ start(Listener, ElevatorType) ->
     foreach_button(fun(Floor, Direction) ->
 			   spawn(fun() -> order_button_poller(Listener, Floor, Direction, 0) end)
 		   end).
-
 
 stop() ->
     driver ! stop.
@@ -98,8 +97,8 @@ floor_sensor_poller(Listener, LastFloor) ->
     ThisFloor = call_port({elev_get_floor_sensor_signal}),
     case (ThisFloor /= LastFloor) and (ThisFloor /= 255) of
 	true ->
-	    %floor_reached(Listener, ThisFloor);
-	    floor_reached(Listener);
+	    floor_reached(Listener, ThisFloor);
+	    %floor_reached(Listener);
 	false ->
 	    timer:sleep(?POLL_PERIOD)
     end,
@@ -171,4 +170,4 @@ foreach_floor(Function) ->
 		    end,
     
     FloorIterator(FloorIterator, ?NUMBER_OF_FLOORS-1),
-    ok.
+ok.

@@ -1,5 +1,5 @@
 -module(fsm).
--export([start/0,state_init/0]).
+-export([start/1]).
 
 start(SCHEDULER_PID) ->
 	spawn(fun() -> state_init(SCHEDULER_PID) end).
@@ -9,7 +9,7 @@ state_init(SCHEDULER_PID) ->
 	timer:sleep(1000),
 
 	io:format("State is init~n"),
-	elev_driver:set_motor_direction(down),
+	elev_driver:set_motor_direction(up),
 
 	receive
 		floor_reached -> 
@@ -24,13 +24,13 @@ state_idle(SCHEDULER_PID) ->
 	elev_driver:set_motor_direction(stop),
 	receive
 		% Order sent from scheduler
-		up ->
+		{execute_order, up} ->
 			elev_driver:set_motor_direction(up),
 			state_running(SCHEDULER_PID);
-		down ->
+		{execute_order, down} ->
 			elev_driver:set_motor_direction(down),
 			state_running(SCHEDULER_PID);
-		open ->
+		{execute_order, open} ->
 			state_doors_open(SCHEDULER_PID)
 	end.
 
@@ -51,4 +51,4 @@ state_doors_open(SCHEDULER_PID) ->
 	elev_driver:set_door_open_lamp(on),
 	timer:sleep(3000),
 	elev_driver:set_door_open_lamp(off),
-	state_idle(SCHEDULER_PID).
+state_idle(SCHEDULER_PID).
