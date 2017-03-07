@@ -1,6 +1,6 @@
 -module(test).
 
--export([get_order/2,main/0]).
+-export([get_order/2,main/0,get_sorted_orders/0]).
 -include("records.hrl").
 
 %-record (orders, {direction, floor, elevatorPID}).
@@ -8,9 +8,12 @@
 
 main() ->
 	Dasdo = get_order(2,2),
+	elev_driver:set_motor_direction(down),
 	io:format("Order received: ~p~n",[Dasdo]).
 
-	
+
+
+
 
 get_order(FSM_PID, CurrentFloor) ->
 	

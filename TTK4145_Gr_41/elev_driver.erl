@@ -1,7 +1,6 @@
 -module(elev_driver).
 -export([start/2, stop/0]).
 -export([init/1, set_motor_direction/1, set_door_open_lamp/1, set_stop_lamp/1, set_floor_indicator/1, set_button_lamp/3, foreach_button/1]).
-
 -define(NUMBER_OF_FLOORS, 4).
 -define(BUTTON_TYPES, [up, down, command]).
 
@@ -108,8 +107,7 @@ order_button_poller(Listener, Floor, Direction, LastState) ->
     ThisState = call_port({elev_get_button_signal, Direction, Floor}),
     case (ThisState /= LastState) and (ThisState == 1) of
 	true ->
-	    %new_order(Listener, Direction, Floor);
-	    ok;
+	    new_order(Listener, Direction, Floor);
 	false ->
 	    timer:sleep(?POLL_PERIOD)
     end,

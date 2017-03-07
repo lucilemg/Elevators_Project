@@ -9,7 +9,7 @@ state_init(SCHEDULER_PID) ->
 	timer:sleep(1000),
 
 	io:format("State is init~n"),
-	elev_driver:set_motor_direction(up),
+	elev_driver:set_motor_direction(down),
 
 	receive
 		floor_reached -> 
