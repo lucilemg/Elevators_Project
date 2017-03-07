@@ -1,6 +1,6 @@
 -module(test).
 
--export([get_order/2,main/0,get_sorted_orders/0]).
+-export([get_order/2,main/0,get_sorted_orders/0, add/1]).
 -include("records.hrl").
 
 %-record (orders, {direction, floor, elevatorPID}).
@@ -56,3 +56,7 @@ get_sorted_orders() ->
 	ThirdOrder= #orders{direction=1,floor=2,elevatorPID = 2},
 
 	RecordList = [FirstOrder,SecondOrder,ThirdOrder].
+
+add(List) ->
+	New = #orders{floor = 3, elevatorPID = 3},
+	NewList = List ++ [New].
