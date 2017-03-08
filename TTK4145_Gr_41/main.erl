@@ -24,8 +24,7 @@ main() ->
 	ElevStatus = #elevatorStatus{direction = -1, lastFloor = -1, state = init, fsm_PID = ?FSM_PID},
 	register(?STATUSLIST_HANDLER_PID, spawn (fun() -> scheduler:statuslist_handler([ElevStatus]) end)),
 
-	TestOrder = #orders{direction = command, floor = 2},
-	register(?ORDERLIST_HANDLER_PID, spawn (fun() -> scheduler:orderlist_handler([TestOrder]) end)).
+	register(?ORDERLIST_HANDLER_PID, spawn (fun() -> scheduler:orderlist_handler([]) end)).
 	%register(?FSM_PID, fsm:start(SCHEDULER_MANAGER_PID)).
 	%register(?FSM_PID,self()).
 
@@ -59,14 +58,24 @@ scheduler_manager() ->
 				true ->
 					ok
 			end,
-			io:format("herereer~n"),
 			?STATUSLIST_HANDLER_PID ! {update_floor, Floor, ?FSM_PID};
-			%scheduler:update_states(asdasd)
+			
 		{awaiting_orders} ->
 			io:format("Looking for action for idle elevator~n"),
 			?STATUSLIST_HANDLER_PID ! {update_state, idle, ?FSM_PID},
 			NextAction = scheduler:receive_action(?FSM_PID),
-			?FSM_PID ! {execute_action, NextAction}
+			?FSM_PID ! {execute_action, NextAction},
+			case NextAction of 
+				move_up ->
+					?STATUSLIST_HANDLER_PID ! {update_direction, up, ?FSM_PID},
+					?STATUSLIST_HANDLER_PID ! {update_state, running, ?FSM_PID};
+				move_down ->
+					?STATUSLIST_HANDLER_PID ! {update_direction, down, ?FSM_PID},
+					?STATUSLIST_HANDLER_PID ! {update_state, running, ?FSM_PID};
+				open_doors ->
+					?STATUSLIST_HANDLER_PID ! {update_direction, 0, ?FSM_PID},
+					?STATUSLIST_HANDLER_PID ! {update_state, doors_open, ?FSM_PID}
+			end
 	end,
 	scheduler_manager().
 
@@ -82,7 +91,12 @@ driver_manager(SCHEDULER_MANAGER_PID) ->
 
 		{new_order, Direction, Floor} ->
 			io:format("New order received ~n"),
-			NewOrder = #orders{floor=Floor,direction=Direction},
+			case Direction of 
+				command ->
+					NewOrder = #orders{floor=Floor,direction=Direction, elevatorPID = ?FSM_PID};
+				_ ->
+					NewOrder = #orders{floor=Floor,direction=Direction}
+			end,
 			?ORDERLIST_HANDLER_PID ! {add_order, NewOrder}
 
 	end,

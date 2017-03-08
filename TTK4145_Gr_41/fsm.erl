@@ -2,10 +2,6 @@
 -export([start/1, up/0]).
 
 
-
-up() ->
-	elev_driver:set_motor_direction(up).
-
 start(SCHEDULER_PID) ->
 	%spawn(fun() -> state_init(SCHEDULER_PID) end).
 	state_init(SCHEDULER_PID).

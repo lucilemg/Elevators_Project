@@ -1,6 +1,6 @@
 -module(scheduler).
 
--export([start/0, statuslist_handler/1, orderlist_handler/1, receive_action/1, get_sorted_orders/1]).
+-export([start/0, statuslist_handler/1, orderlist_handler/1, receive_action/1]).
 -include("records.hrl").
 
 
@@ -8,9 +8,6 @@ start() ->
 	%SCHED_LISTENER_PID = spawn (fun() -> scheduler_listener([],[]) end),
 	spawn(fun() -> scheduler() end).
 
-%cost_function(Orders, ElevatorStates, Caller_PID) ->
-	% Sort list as cost function of time waited per order or something
-	%Caller_PID ! {sorted_orders, Orders}.
 
 scheduler() ->
 	io:format("Scheduler ready to receive~n"),
@@ -30,14 +27,10 @@ scheduler() ->
 
 receive_action(FSM_PID) ->
 
-	% both functions below need statuses, maybe fetch first if this is the only
-	% place statuses are needed?
+	CurrentStatuses = get_statuses(),
+	OptimalOrder = get_optimal_order(CurrentStatuses, FSM_PID), 
 
-	SortedOrders = get_sorted_orders(FSM_PID), 
-	% this must return an in-order prioritized list of orders to execute
-
- 	CurrentFloor = get_floor(FSM_PID),
-
+ 	CurrentFloor = get_floor(CurrentStatuses, FSM_PID),
 
 	io:format("Current floor: ~p~n",[CurrentFloor]),
 
@@ -69,8 +62,7 @@ receive_action(FSM_PID) ->
 			open_doors
 	end.
 
-get_floor(FSM_PID) ->
-	CurrentStatuses = get_statuses(),
+get_floor(CurrentStatuses, FSM_PID) ->
 	Status = lists:keyfind(FSM_PID,5,CurrentStatuses), 	% Find status of wanted FSM_PID
 	Status#elevatorStatus.lastFloor.					% Return floor
 
@@ -85,7 +77,7 @@ get_statuses() ->
 
 
 statuslist_handler(CurrentStatuses) ->
-	io:format("List of current statuses: ~n~p~n",[CurrentStatuses]),
+	%io:format("List of current statuses: ~n~p~n",[CurrentStatuses]),
 	receive 
 		{update_direction, Direction, ElevPID} ->
 			OldStatus = lists:keyfind(ElevPID, 5, CurrentStatuses),
@@ -116,59 +108,62 @@ statuslist_handler(CurrentStatuses) ->
 
 orderlist_handler(CurrentOrders) ->
 	io:format("List of current orders: ~n~p~n",[CurrentOrders]),
-	receive 
+	receive
 		{add_order, NewOrder} ->
-			OldOrder = undefined,
+
 			NewOrders = CurrentOrders ++ [NewOrder];
 
 		{remove_order, Floor, FSM_PID} ->
 
-			%remove_orders_loop(Floor, FSM_PID, 0),
-			io:format("Attempting remove of order at floor ~p~n",[Floor]),
-			%OldOrder = #orders{direction = 2, floor = Floor, elevatorPID = FSM_PID},
-			OldOrder = #orders{direction = command, floor = Floor},
-			io:format("order found? : ~p~n",[lists:keyfind(command,2,CurrentOrders)]),
+			io:format("Attempting remove of orders at floor ~p~n",[Floor]),
+			OldOrderCommand = #orders{direction = command, floor = Floor, elevatorPID = FSM_PID},
+			OldOrderUp		= #orders{direction = up, floor = Floor, elevatorPID = FSM_PID},
+			OldOrderDown	= #orders{direction = down, floor = Floor, elevatorPID = FSM_PID},
+			
+			%io:format("order found? : ~p~n",[lists:keyfind(command,2,CurrentOrders)]),
 
-			NewOrders = lists:delete(OldOrder, CurrentOrders);
+			WithoutCommand = lists:delete(OldOrderCommand, CurrentOrders),
+			WithoutUpAndCommand = lists:delete(OldOrderUp, WithoutCommand),
+			WithoutUpDownAndCommand = lists:delete(OldOrderDown, WithoutUpAndCommand),
+
+			NewOrders = WithoutUpDownAndCommand;
 
 		{update_order, Order} ->
 			% Something happening when orders are reassigned, meaning the cost function 
 			% has calculated
+			NewOrders = try lists:foreach(fun(N) -> 
+				case ((Order#orders.direction == N#orders.direction) and (Order#orders.floor == N#orders.floor)) of
+					true ->
+						io:format("Found the old order: ~p~n",[N]),
+						throw(N);
+					false ->
+						ok
+				end,
+				case N == lists:last(CurrentOrders) of
+					true ->
+						throw(order_not_found);
+					_ ->
+						ok
+				end
+				end, CurrentOrders)
 
-			% try lists:foreach(fun(N) -> 
-			% 	case ((Order#orders.direction == N#orders.direction) and (Order#orders.floor == N#orders.floor)) of
-			% 	true ->
-			% 		io:format("Found the old order~n"),
-			% 		OldOrder = N,
-			% 		throw(old_order_found);
-			% 	false ->
-			% 		ok
-			% 	end
-			% end, CurrentOrders)
-
-			% catch
-			% 	throw:old_order_found ->
-			% 		NewOrder = OldOrder#orders{elevatorPID = Order#orders.elevatorPID},
-			% 		NewOrders = lists:delete(OldOrder,CurrentOrders) ++ [NewOrder]
-			% end;
-			NewOrders = undefined;
-
+				catch
+					throw:order_not_found ->
+						CurrentOrders;
+					throw:N ->
+						NewOrder = N#orders{elevatorPID = Order#orders.elevatorPID},
+						lists:delete(N,CurrentOrders) ++ [NewOrder]
+			end;
 
 		{get_all_orders, CallerPID} ->
-			NewOrders = undefined,
-			OldOrder = undefined,
+			NewOrders = CurrentOrders,
 			CallerPID ! {all_orders, CurrentOrders}
 
 	end,
-	case NewOrders of
-		undefined ->
-			orderlist_handler(CurrentOrders);
-		_ ->
-			orderlist_handler(NewOrders)
-	end.
+	orderlist_handler(NewOrders).
 
 
-get_sorted_orders(FSM_PID) ->
+get_optimal_order(FSM_PID, CurrentStatuses) ->
 	%FirstOrder = #orders{direction=1,floor=1,elevatorPID = 1},
 	%SecondOrder= #orders{direction=2,floor=3,elevatorPID = TESTER},
 	%ThirdOrder = #orders{direction=1,floor=2,elevatorPID = 2},
@@ -179,11 +174,10 @@ get_sorted_orders(FSM_PID) ->
 			ok
 	end,
 
-	SortedList = calculate_cost_function(CurrentOrders, FSM_PID).
+	OptimalOrder = calculate_cost_function(CurrentOrders, CurrentStatuses, FSM_PID).
 
 
-calculate_cost_function(Orders, FSM_PID) ->
-	ElevatorStates = get_statuses(),
+calculate_cost_function(CurrentOrders, CurrentStatuses, FSM_PID) ->
 	CalculatedOrders = loop_shit(Orders,length(Orders), FSM_PID),
 	lists:reverse(CalculatedOrders).
 
@@ -195,10 +189,14 @@ loop_shit(Orders, N, FSM_PID) ->
 	case Order#orders.direction of
 		2 ->
 			io:format("Command found, assigned to local elevator~n"),
-			CalculatedOrder = Order#orders{elevatorPID = FSM_PID};
+			AssignedOrder = Order#orders{elevatorPID = FSM_PID};
 		_ ->
 			% calculate best elevator to execute, implement 1 & 2 = up & down
-			CalculatedOrder = Order#orders{elevatorPID = FSM_PID}
+			AssignedOrder = Order#orders{elevatorPID = FSM_PID}
 	end,
-	NewOrders = lists:delete(Order,Orders) ++ [CalculatedOrder],
+	?ORDERLIST_HANDLER_PID ! {update_order, AssignedOrder},
+	NewOrders = lists:delete(Order,Orders) ++ [AssignedOrder],
 	loop_shit(NewOrders,N-1, FSM_PID).
+
+
+
