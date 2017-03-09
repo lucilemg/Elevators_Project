@@ -1,17 +1,20 @@
 -module(network).
 -export([init_conn/2,send_message/2,init_listener/2,read_mailbox/0,broadcast/1]).
 
+-include("records.hrl").
 
-init_conn(_,5) ->
-	io:format("No node is available for connection~n");
+
 init_conn(ConnectionList, Element) ->
 	Connection = lists:nth(Element,ConnectionList),
-	io:format("Testing with connection: ~p ~n",[Connection]),
-	case 	pong == net_adm:ping(Connection) of
-			true ->	io:format("Successful connection~n");
+	case net_adm:ping(Connection) of
+			pong ->	io:format("Successful connection to ~p~n",[Connection]);
+					%init_listener(Namelist, )
 
-			false -> io:format("Failure to connect~n"),
-				init_conn(ConnectionList,Element+1)
+			pang -> io:format("Failure to connect to ~p~n",[Connection]),
+					if 
+						Element+1 > length(ConnectionList) 	-> io:format("No node is available for connection~n");
+						true 								-> init_conn(ConnectionList,Element+1)
+					end
 	end.
 
 

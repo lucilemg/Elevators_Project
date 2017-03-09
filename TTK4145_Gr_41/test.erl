@@ -1,6 +1,6 @@
 -module(test).
 
--export([get_order/2,get_optimal_order/1, add/1, asd/0]).
+-export([get_order/2,get_optimal_order/1, asd/0]).
 -include("records.hrl").
 
 %-record (orders, {direction, floor, elevatorPID}).
@@ -77,61 +77,80 @@ end.
 get_optimal_order(FSM_PID) ->
 
 	FirstOrder = #orders{direction=command, floor=1, elevatorPID = 1},
-	SecondOrder= #orders{direction=up,floor=1},
+	SecondOrder= #orders{direction=up,floor=2},
 	ThirdOrder = #orders{direction=down,floor=2},
 
 	Orders = [FirstOrder,SecondOrder,ThirdOrder],
+	%Orders = [],
 
-	Elev1Status = #elevatorStatus{direction = 0, lastFloor = 0, state = idle, fsm_PID = 1},
-	Elev2Status = #elevatorStatus{direction = 0, lastFloor = 3, state = idle, fsm_PID = 2},
+	Elev1Status = #elevatorStatus{direction = none, lastFloor = 0, state = idle, fsm_PID = 1},
+	Elev2Status = #elevatorStatus{direction = up, lastFloor = 2, state = idle, fsm_PID = 2},
 	
 	Statuses = [Elev1Status, Elev2Status],
+	Status = lists:keyfind(FSM_PID,5,Statuses),
 
-	OptimalOrder = calculate_cost_function(Orders, Statuses, FSM_PID).
 
+	CalculatedOrders = cost_function_loop(Orders, Status, length(Orders)),
 
-calculate_cost_function(CurrentOrders, CurrentStatuses, FSM_PID) ->
-	
-	lists:foreach(fun(N) -> 
-		case FSM_PID == N#orders.elevatorPID of
-			true ->
-				
-			false ->
-				ok
+	% Sort by lowest cost
+	F = fun(X,Y) -> lists:nth(4,X) < lists:nth(4,Y) end,
+	SortedList = lists:sort(F,CalculatedOrders),
+
+	try
+		case length(SortedList) of 
+			0 -> throw(no_orders);
+			_ -> throw(order_found)
 		end
-		end, CurrentOrders)
+	catch
+		throw:no_orders ->
+			no_orders;
+		throw:order_found ->
+			lists:nth(1,SortedList)
+	end.
 
 
-	%Pair = Order ++ [Cost],
 
-	CalculatedOrders = loop_shit(CurrentOrders, CurrentStatuses, length(Orders), FSM_PID),
-
-	%lists:sort(CalculatedOrders).
-	
-
-loop_shit(Orders, Statuses, 0, FSM_PID) ->
+cost_function_loop(Orders, _, 0) ->
 	Orders;
-loop_shit(Orders, Statuses, N, FSM_PID) ->
+cost_function_loop(Orders, Status, N) ->
+
 	Order = lists:nth(N, Orders),
+	OrderAsList  = [Order#orders.direction, Order#orders.floor, Order#orders.elevatorPID],
 
 	% Calculate TakenCost
 	case Order#orders.elevatorPID == undefined of
 		true ->
 			ok;
 		false ->
-			throw(order_taken)
+			%throw(order_taken)
+			ok
 	end,
 
 	case Order#orders.direction of
 		command ->
-			io:format("Command found, SHOULD NOT HAPPEN~n"),
-		down ->
-			AssignedOrder = Order#orders{elevatorPID = FSM_PID}
+			io:format("Command found, SHOULD NOT HAPPEN~n");
+			%throw(unassigned_command);
+		_ ->
+			ok
 	end,
 
-	TotalCost = DistanceCost + DirectionCost + TurnCost + ,
+	case ((Order#orders.floor == Status#elevatorStatus.lastFloor) and (((Order#orders.direction == up) and (Status#elevatorStatus.direction == down)) 
+		or ((Order#orders.direction == down) and (Status#elevatorStatus.direction == up)))) of
+		true ->
+			DirectionCost = 1;
+		false ->
+			DirectionCost = 0
+	end,
 
-	%?ORDERLIST_HANDLER_PID ! {update_order, AssignedOrder},
-	NewOrders = lists:delete(Order,Orders) ++ [AssignedOrder],
-	loop_shit(NewOrders,N-1, FSM_PID).
+	DistanceCost = abs(Order#orders.floor - Status#elevatorStatus.lastFloor),
+
+
+	TotalCost = DirectionCost + DistanceCost,
+
+	CalculatedOrder = OrderAsList ++ [TotalCost],
+	NewOrders = lists:delete(Order,Orders) ++ [CalculatedOrder],
+	cost_function_loop(NewOrders, Status, N-1).
+
+
+
 

@@ -1,5 +1,5 @@
 -module(fsm).
--export([start/1, up/0]).
+-export([start/1]).
 
 
 start(SCHEDULER_PID) ->
@@ -15,13 +15,12 @@ state_init(SCHEDULER_PID) ->
 	io:format("Waiting to receive...~n"),
 	receive
 		{floor_reached} -> 
-			io:format("ye~n"),
+			io:format("Entering idle state~n"),
 			state_idle(SCHEDULER_PID)
 	end.
 
 state_idle(SCHEDULER_PID) ->
 	elev_driver:set_motor_direction(stop),
-	io:format("State is idle~n"),
 	SCHEDULER_PID ! {awaiting_orders},
 	receive
 		% Order sent from scheduler
@@ -32,7 +31,6 @@ state_idle(SCHEDULER_PID) ->
 			elev_driver:set_motor_direction(down),
 			state_running(SCHEDULER_PID);
 		{execute_action, open_doors} ->
-			elev_driver:set_door_open_lamp(on),
 			state_doors_open(SCHEDULER_PID)
 	after 1000 ->
 		state_idle(SCHEDULER_PID)
@@ -53,6 +51,8 @@ state_running(SCHEDULER_PID) ->
 state_doors_open(SCHEDULER_PID) ->
 	io:format("State is doors open~n"),
 	elev_driver:set_motor_direction(stop),
+	elev_driver:set_door_open_lamp(on),
 	timer:sleep(3000),
 	elev_driver:set_door_open_lamp(off),
+	io:format("Entering idle state~n"),
 	state_idle(SCHEDULER_PID).
