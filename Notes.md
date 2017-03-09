@@ -13,3 +13,5 @@
 
 - Network module improved:
   - ConnectionList is added to records.hrl along with NameList
+  
+- Network module needs further rework. Found some fantastic funtionality in net_kernel, like net_kernel:start([Name]), enabling to start with code written in the .erl files and not from the shell, as well as net_kernel:monitor_nodes(true), making each node receive a message when another node has shut down. Sounds very useful! Also read about .hosts-file. Everything seems very doable.
