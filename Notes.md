@@ -6,3 +6,10 @@
 - Handling several changes to the lists in one function call is a challenge, both in orderlist_handler and statuslist_handler
 - Cost function needs some actual logic
 - Main priority next time: solve challenges mentioned above
+
+
+- Cost function is functional and tested on single elevator, seems to work decently
+- Button lights are now managed by a button_light_manager, works as intended
+
+- Network module improved:
+  - ConnectionList is added to records.hrl along with NameList
