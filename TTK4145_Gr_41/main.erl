@@ -1,13 +1,15 @@
 -module(main).
 
--export([main/0]).
+-export([main/1]).
 -include("records.hrl").
 
 
-main() ->
+main(Num) ->
 
+	io:format("My PID in main: ~p~n",[self()]),
 
-	network:init_conn(?ConnectionList,1),
+	network:init_conn(Num),
+	
 	network:init_listener(?ElevatorNameList,1),
 
 	%SCHEDULER_PID = scheduler:start(),
@@ -24,7 +26,57 @@ main() ->
 
 	register(?ORDERLIST_HANDLER_PID, spawn (fun() -> scheduler:orderlist_handler([]) end)),
 
-	spawn (fun() -> button_light_manager([]) end).
+	spawn (fun() -> button_light_manager([]) end),
+	
+	io:format("Currently connected nodes, with nodes(), are: ~p~n",[nodes()]),
+
+	init_orderlist_and_statuslist(Num),
+
+	monitor_listener().
+
+
+init_orderlist_and_statuslist(Num) ->
+	try lists:foreach(fun(N) ->
+		case lists:nth(Num,?ElevatorNameList) of
+			N ->
+				ok;
+			_ ->
+				case global:whereis_name(N) of
+					undefined -> ok;
+					PID -> throw(PID)
+				end
+		end
+	end, ?ElevatorNameList)
+
+	catch
+		throw:PID ->
+			PID ! {get_all_orders, self()},
+			receive 
+				{all_orders, Orders} ->
+					?ORDERLIST_HANDLER_PID ! {add_all_orders, Orders}
+			end,
+			PID ! {get_statuses, self()},
+			receive
+				{all_statuses, Statuses} ->
+					?STATUSLIST_HANDLER_PID ! {update_all_statuses, Statuses}
+			end,
+			io:format("init done~n")
+
+	end.
+
+
+
+
+monitor_listener() ->	
+	receive 
+		{nodeup, Node} -> io:format("~p is up~n",[Node]);
+		{nodedown, Node} -> 
+			% Handle this thing
+			io:format("~p is down~n",[Node]);
+		_ -> io:format("Got something else, unexpected~n")
+	end,
+	io:format("Currently connected nodes, with nodes(), are: ~p~n",[nodes()]),
+	monitor_listener().
 
 
 scheduler_manager_init() ->
@@ -33,8 +85,8 @@ scheduler_manager_init() ->
 			io:format("First floor reached!~n"),
 			?FSM_PID ! {floor_reached},
 			%InitStatus = elevatorStatus#{direction = 0, lastFloor = Floor, state = idle, fsm_PID = ?FSM_PID},
-			?STATUSLIST_HANDLER_PID ! {update_direction, 0, ?FSM_PID},
-			?STATUSLIST_HANDLER_PID ! {update_floor, Floor, ?FSM_PID}
+			?STATUSLIST_HANDLER_PID ! {update_direction, 0, ?FSM_PID, ?LOCAL},
+			?STATUSLIST_HANDLER_PID ! {update_floor, Floor, ?FSM_PID, ?LOCAL}
 	end,
 	scheduler_manager().
 
@@ -43,7 +95,7 @@ scheduler_manager() ->
 	receive
 		{floor_reached, Floor} ->
 			% Check if the local elevator (FSM) should stop
-			?STATUSLIST_HANDLER_PID ! {update_floor, Floor, ?FSM_PID},
+			?STATUSLIST_HANDLER_PID ! {update_floor, Floor, ?FSM_PID, ?LOCAL},
 
 			io:format("Checking if elevator should stop~n"),
 
@@ -51,33 +103,33 @@ scheduler_manager() ->
 			case Result of
 				open_doors ->
 					?FSM_PID ! {destination_floor_reached},
-					?ORDERLIST_HANDLER_PID	! {remove_order, ?FSM_PID},
-					?STATUSLIST_HANDLER_PID ! {update_state, open_doors, ?FSM_PID};
+					?ORDERLIST_HANDLER_PID	! {remove_order, ?FSM_PID, ?LOCAL},
+					?STATUSLIST_HANDLER_PID ! {update_state, open_doors, ?FSM_PID, ?LOCAL};
 				no_orders_available ->
 					io:format("We are running when there are no more orders, lets stop.~n"),
 					?FSM_PID ! {destination_floor_reached},
-					?STATUSLIST_HANDLER_PID ! {update_state, open_doors, ?FSM_PID};
+					?STATUSLIST_HANDLER_PID ! {update_state, open_doors, ?FSM_PID, ?LOCAL};
 				_ ->
 					ok
 			end;
-			
+
 		{awaiting_orders} ->
 			%io:format("Looking for action for idle elevator~n"),
-			?STATUSLIST_HANDLER_PID ! {update_state, idle, ?FSM_PID},
+			?STATUSLIST_HANDLER_PID ! {update_state, idle, ?FSM_PID, ?LOCAL},
 
 			NextAction = scheduler:receive_action(?FSM_PID),
 			?FSM_PID ! {execute_action, NextAction},
 			case NextAction of 
 				move_up ->
-					?STATUSLIST_HANDLER_PID ! {update_direction, up, ?FSM_PID},
-					?STATUSLIST_HANDLER_PID ! {update_state, running, ?FSM_PID};
+					?STATUSLIST_HANDLER_PID ! {update_direction, up, ?FSM_PID, ?LOCAL},
+					?STATUSLIST_HANDLER_PID ! {update_state, running, ?FSM_PID, ?LOCAL};
 				move_down ->
-					?STATUSLIST_HANDLER_PID ! {update_direction, down, ?FSM_PID},
-					?STATUSLIST_HANDLER_PID ! {update_state, running, ?FSM_PID};
+					?STATUSLIST_HANDLER_PID ! {update_direction, down, ?FSM_PID, ?LOCAL},
+					?STATUSLIST_HANDLER_PID ! {update_state, running, ?FSM_PID, ?LOCAL};
 				open_doors ->
-					?ORDERLIST_HANDLER_PID ! {remove_order, ?FSM_PID},
-					?STATUSLIST_HANDLER_PID ! {update_direction, 0, ?FSM_PID},
-					?STATUSLIST_HANDLER_PID ! {update_state, doors_open, ?FSM_PID};
+					?ORDERLIST_HANDLER_PID ! {remove_order, ?FSM_PID, ?LOCAL},
+					?STATUSLIST_HANDLER_PID ! {update_direction, 0, ?FSM_PID, ?LOCAL},
+					?STATUSLIST_HANDLER_PID ! {update_state, doors_open, ?FSM_PID, ?LOCAL};
 				no_orders_available ->
 					ok
 			end
@@ -85,8 +137,9 @@ scheduler_manager() ->
 	scheduler_manager().
 
 
+
+
 driver_manager(SCHEDULER_MANAGER_PID) ->
-	SCHEDULER_MANAGER_PID ! {hello, ok},
 
 	receive 
 		{floor_reached, Floor} ->
@@ -103,7 +156,7 @@ driver_manager(SCHEDULER_MANAGER_PID) ->
 				_ ->
 					NewOrder = #orders{floor=Floor,direction=Direction}
 			end,
-			?ORDERLIST_HANDLER_PID ! {add_order, NewOrder}
+			?ORDERLIST_HANDLER_PID ! {add_order, NewOrder, ?LOCAL}
 
 	end,
 	driver_manager(SCHEDULER_MANAGER_PID).

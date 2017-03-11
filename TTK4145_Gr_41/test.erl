@@ -1,9 +1,26 @@
 -module(test).
 
--export([get_order/2,get_optimal_order/1, asd/0]).
+-export([get_order/2,get_optimal_order/1, asd/0, qwe/0,omm/0]).
 -include("records.hrl").
 
 %-record (orders, {direction, floor, elevatorPID}).
+
+qwe() ->
+
+	net_kernel:start(['elev2@127.0.0.1']),
+	net_kernel:connect_node('elev1@127.0.0.1'),
+
+	io:format("a").
+
+
+omm() ->
+	Order = #orders{direction=up, floor= 2},
+
+	PID = global:whereis_name('elev1'),
+	io:format("b"),
+	Message = {add_order, Order},
+
+	PID ! Message.
 
 asd() ->
 
