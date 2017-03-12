@@ -1,9 +1,55 @@
 -module(test).
 
--export([get_order/2,get_optimal_order/1, asd/0, qwe/0,omm/0]).
+-export([get_order/2,get_optimal_order/1, asd/0,qwe/0,omm/0, is_order_removed/0]).
 -include("records.hrl").
 
 %-record (orders, {direction, floor, elevatorPID}).
+
+
+
+is_order_removed() ->
+
+	FirstOrder = #orders{direction=command, floor=1, elevatorPID = 1},
+	SecondOrder= #orders{direction=down,floor=2},
+
+
+	ElevID = 3,
+	Order = #orders{direction=down,floor=1, elevatorPID = 1},
+
+	OrderList = [FirstOrder,SecondOrder],
+
+	try lists:foreach (fun(N) ->
+
+		case N#orders.floor == Order#orders.floor of
+			true ->
+				case (N#orders.direction == command) of
+					true -> 
+						case ((N#orders.elevatorPID == ElevID) and (Order#orders.direction == command)) of
+							true -> throw(order_exists);
+							false -> oka
+						end;
+					false ->
+						case (N#orders.direction == Order#orders.direction) of
+							true ->	throw(order_exists);
+							false -> okb
+						end
+				end;
+
+			_ ->
+				case N == lists:last(OrderList) of
+					true ->
+						throw(order_not_found);
+					_ ->
+						ok
+				end
+		end
+
+	end, OrderList)
+	catch
+			throw:order_exists -> false;
+			throw:order_not_found -> true
+	end.	
+
 
 qwe() ->
 

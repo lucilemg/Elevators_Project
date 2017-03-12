@@ -45,7 +45,10 @@ state_running(SCHEDULER_PID) ->
 			% Sent from scheduler when a floor_reached event
 			% is triggered and the elevator is set to execute
 			% an order at that floor.
-			state_doors_open(SCHEDULER_PID)
+			state_doors_open(SCHEDULER_PID);
+		{next_direction, Direction} ->
+			elev_driver:set_motor_direction(Direction),
+			state_running(SCHEDULER_PID)
 	end.
 
 state_doors_open(SCHEDULER_PID) ->
