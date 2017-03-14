@@ -24,8 +24,6 @@ receive_action(ElevID) ->
 		OrderFloor 	 = lists:nth(2,OptimalOrder),
 		CurrentFloor = CurrentStatus#elevatorStatus.lastFloor,
 
-		%io:format("Found order to execute: ~p~n",[OptimalOrder]),
-
 		% Assign order to elevator, notify orderlist
 		AssignerOrderRecord = #orders{ direction 		= lists:nth(1,OptimalOrder), 
 									   floor 			= lists:nth(2,OptimalOrder), 
@@ -40,21 +38,15 @@ receive_action(ElevID) ->
 		end
 
 	catch
-		throw:order_above ->
-			io:format("Move up~n"),
-			move_up;
 
-		throw:order_below ->
-			io:format("Move down~n"),
-			move_down;
+		throw:order_above 	 -> move_up;
 
-		throw:order_at_floor ->
-			io:format("Open doors~n"),
-			open_doors;
+		throw:order_below 	 -> move_down;
 
-		throw:no_order ->
-			%io:format("No orders available~n"),
-			no_orders_available
+		throw:order_at_floor -> open_doors;
+
+		throw:no_order 		 -> no_orders_available
+
 	end.
 
 
@@ -62,7 +54,6 @@ get_status() ->
 	?STATUSLIST_HANDLER_PID ! {get_status, self()},
 	receive
 		{status, CurrentStatus} -> ok
-		% Introduce After -> throw error? In case something somehow gets stuck (fault tolerance)
 	end,
 	CurrentStatus.
 
@@ -100,7 +91,7 @@ statuslist_handler(CurrentStatus) ->
 
 
 orderlist_handler(CurrentOrders) ->
-	%io:format("~n### ALL CURRENT ORDERS: ~p~n",[CurrentOrders]),
+
 	receive
 
 		{add_order, NewOrder, SenderType} ->
@@ -146,12 +137,12 @@ orderlist_handler(CurrentOrders) ->
 						network -> ok;
 						local -> network:broadcast({add_order, NewOrder})
 					end,
-					%io:format("Orders after adding new: ~n~p~n",[CurrentOrders ++ [NewOrder]]),
 					CurrentOrders ++ [NewOrder]
 			end;		
 
+
 		{remove_order, Floor, ElevID, SenderType} ->
-			%io:format("PRE REMOVAL: list of current orders: ~n~p~n",[CurrentOrders]),
+
 			NewOrders = remove_orders_at_floor(length(CurrentOrders),CurrentOrders,Floor,ElevID),
 
 			case SenderType of
@@ -159,8 +150,9 @@ orderlist_handler(CurrentOrders) ->
 				local -> network:broadcast({remove_order, Floor, ElevID})
 			end;
 
+
 		{reassign_order, Order, SenderType} ->
-			%io:format("Upd: List of current orders: ~n~p~n",[CurrentOrders]),
+
 			NewOrders = try case length(CurrentOrders) of
 				0 -> throw(order_not_found);
 				_ -> ok
@@ -193,8 +185,7 @@ orderlist_handler(CurrentOrders) ->
 						end,
 						NewOrder = N#orders{assignedElevID = Order#orders.assignedElevID},
 						lists:delete(N,CurrentOrders) ++ [NewOrder]
-			end,
-			io:format("Reassigned as: ~p~n",[NewOrders]);
+			end;
 
 
 		{increment_waiting_time, SenderType} ->
@@ -226,8 +217,7 @@ orderlist_handler(CurrentOrders) ->
 		{add_all_orders, Orders} ->
 
 			lists:foreach(fun(Order) ->
-				self() ! {add_order, Order, ?NETWORK},
-				io:format("addloop: ~p~n",[Order])
+				self() ! {add_order, Order, ?NETWORK}
 			end, Orders),
 			NewOrders = CurrentOrders;
 
@@ -281,7 +271,6 @@ get_optimal_order(Status, ElevID) ->
 
 
 cost_function_loop(Orders, _, _, 0) ->
-	%io:format("Orders with costs: ~p~n",[Orders]),
 	Orders;
 cost_function_loop(Orders, Status, ElevID, N) ->
 	

@@ -96,7 +96,6 @@ floor_sensor_poller(Listener, LastFloor) ->
     case (ThisFloor /= LastFloor) and (ThisFloor /= 255) of
 	true ->
 	    floor_reached(Listener, ThisFloor);
-	    %floor_reached(Listener);
 	false ->
 	    timer:sleep(?POLL_PERIOD)
     end,

@@ -18,18 +18,16 @@ init_connections(ElevID) ->
 	net_kernel:set_net_ticktime(4,0),
 	net_kernel:monitor_nodes(true),
 
-	% Attempts to establish connection to network, returns list of connections
-	net_adm:world_list(?IPList,verbose),
-
 	% Spawns and registers a listener for network messages
 	init_listener(Name,ElevID),
 
-	connection_loop().
+	spawn(fun() -> connection_loop() end),
+
+	network_monitor([]).
 
 
 init_listener(Name, ElevID) ->
 	timer:sleep(500),
-	io:format("Registered names: ~p~n", [global:registered_names()]),
 
 	case global:whereis_name(Name) of
 		undefined ->
@@ -43,11 +41,40 @@ init_listener(Name, ElevID) ->
 
 
 connection_loop() ->
-
-	io:format("Checking connections...~n"),
-	net_adm:world_list(?IPList,verbose),
+	timer:sleep(100),
+	net_adm:world_list(?IPList),
 	timer:sleep(5000),
 	connection_loop().
+
+
+
+% PairList contains pairs of IP for a Node with its corresponding ElevID
+network_monitor(PairList) ->	
+
+	receive 
+
+		{nodeup, Node} -> 
+
+			timer:sleep(5000),
+			NodeName = lists:sublist(atom_to_list(Node),5),
+			(global:whereis_name(list_to_atom(NodeName))) ! {give_id, self()},
+			receive 
+				{elev_id, NodeElevID} -> NewPair = {Node, NodeElevID}
+			end,
+			NewPairList = PairList ++ [NewPair],
+			main:update_orderlist(NodeName);
+
+
+		{nodedown, Node} -> 
+
+			PairTuple = lists:keyfind(Node,1,PairList),
+			{_,ElevID} = PairTuple,
+			?ORDERLIST_HANDLER_PID ! {remove_assignments, ElevID},
+			NewPairList = lists:delete({Node,ElevID},PairList)
+
+
+	end,
+	network_monitor(NewPairList).
 
 
 receive_network_messages(OwnElevID) ->
@@ -80,12 +107,7 @@ receive_network_messages(OwnElevID) ->
 
 
 		{give_id, CallerPID} ->
-			CallerPID ! {elev_id, OwnElevID};
-
-
-		Something ->
-			io:format("Something: ~p~n",[Something])
-
+			CallerPID ! {elev_id, OwnElevID}
 
 	end,
 	receive_network_messages(OwnElevID).
@@ -99,6 +121,5 @@ broadcast(Message) ->
 	lists:foreach(fun(Node) -> 
 
 			NodeName = lists:sublist(atom_to_list(Node),5),
-			io:format("Broadcast: NodeName = ~p~n",[NodeName]),
 			(global:whereis_name(list_to_atom(NodeName))) ! Message
 			end, RecipientsIPs).
