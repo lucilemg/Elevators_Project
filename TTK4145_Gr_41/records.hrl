@@ -12,7 +12,7 @@
 -define(NETWORK_MONITOR_PID,monitor_pid).
 
 
--define(IPList, 			['129.241.187.144', '129.241.187.151', 	'127.0.0.1']).
+-define(IPList, 			['129.241.187.144', '129.241.187.152', 	'127.0.0.1']).
 -define(ElevatorNameList, 	['elev1',			'elev2',			'elev3']).
 
 -define(LOCAL,local).
