@@ -6,3 +6,4 @@ cd ebin/;
 erl;
 
 exec $SHELL;
+

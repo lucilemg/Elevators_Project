@@ -18,6 +18,9 @@ init_connections(ElevID) ->
 	net_kernel:set_net_ticktime(4,0),
 	net_kernel:monitor_nodes(true),
 
+	% Attempts to establish connection to network, returns list of connections
+	%net_adm:world_list(?IPList,verbose),
+
 	% Spawns and registers a listener for network messages
 	init_listener(Name,ElevID),
 
@@ -28,6 +31,7 @@ init_connections(ElevID) ->
 
 init_listener(Name, ElevID) ->
 	timer:sleep(500),
+	io:format("Registered names: ~p~n", [global:registered_names()]),
 
 	case global:whereis_name(Name) of
 		undefined ->
@@ -42,6 +46,7 @@ init_listener(Name, ElevID) ->
 
 connection_loop() ->
 	timer:sleep(100),
+	io:format("Checking connections...~n"),
 	net_adm:world_list(?IPList),
 	timer:sleep(5000),
 	connection_loop().
@@ -54,31 +59,39 @@ network_monitor(PairList) ->
 	receive 
 
 		{nodeup, Node} -> 
+			io:format("~p is up~n",[Node]),
 
 			timer:sleep(5000),
 			NodeName = lists:sublist(atom_to_list(Node),5),
+			io:format("regd names: ~p~n",[global:registered_names()]),
 			(global:whereis_name(list_to_atom(NodeName))) ! {give_id, self()},
+			io:format("Waitinf in nodeup~n"),
 			receive 
 				{elev_id, NodeElevID} -> NewPair = {Node, NodeElevID}
 			end,
 			NewPairList = PairList ++ [NewPair],
-			main:update_orderlist(NodeName);
+			main:update_orderlist_and_statuslist(NodeName);
 
 
 		{nodedown, Node} -> 
+			io:format("~p is down~n",[Node]),
 
 			PairTuple = lists:keyfind(Node,1,PairList),
 			{_,ElevID} = PairTuple,
 			?ORDERLIST_HANDLER_PID ! {remove_assignments, ElevID},
-			NewPairList = lists:delete({Node,ElevID},PairList)
+			NewPairList = lists:delete({Node,ElevID},PairList);
 
+
+		A -> io:format("got thomesing elsek;::::: ~p~n",[A]),
+			NewPairList = PairList
 
 	end,
+	io:format("Currently connected nodes, with nodes(), are: ~p~n",[nodes()]),
 	network_monitor(NewPairList).
 
 
 receive_network_messages(OwnElevID) ->
-
+	io:format("looking for network messages~n"),
 	receive
 
 		{add_order, Order} ->
@@ -107,7 +120,13 @@ receive_network_messages(OwnElevID) ->
 
 
 		{give_id, CallerPID} ->
-			CallerPID ! {elev_id, OwnElevID}
+			io:format("give_id received~n"),
+			CallerPID ! {elev_id, OwnElevID};
+
+
+		Something ->
+			io:format("Something: ~p~n",[Something])
+
 
 	end,
 	receive_network_messages(OwnElevID).
@@ -121,5 +140,6 @@ broadcast(Message) ->
 	lists:foreach(fun(Node) -> 
 
 			NodeName = lists:sublist(atom_to_list(Node),5),
+			io:format("Broadcast: NodeName = ~p~n",[NodeName]),
 			(global:whereis_name(list_to_atom(NodeName))) ! Message
 			end, RecipientsIPs).

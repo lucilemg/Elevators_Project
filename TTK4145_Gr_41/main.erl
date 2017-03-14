@@ -1,10 +1,11 @@
 -module(main).
 
--export([init/1, update_orderlist/1]).
+-export([init/1, update_orderlist_and_statuslist/1]).
 -include("records.hrl").
 
 
 init(ElevID) ->
+	io:format("Starting!~n"),
 	timer:sleep(1000),
 
 	process_flag(trap_exit,true),
@@ -12,15 +13,19 @@ init(ElevID) ->
 
 	scheduler:init_listhandlers(),
 
-	SCHEDULER_MANAGER_PID = spawn_link (fun() -> scheduler_manager_init(ElevID) end),
+	timer:sleep(2000),
 
+	SCHEDULER_MANAGER_PID = spawn_link (fun() -> scheduler_manager_init(ElevID) end),
 	DRIVER_MANAGER_PID	  =	spawn_link (fun() -> driver_manager(SCHEDULER_MANAGER_PID,ElevID) end),
+
 
 	elev_driver:start(DRIVER_MANAGER_PID, elevator),
 
-	register(?FSM_PID, spawn_link(fun() -> fsm:state_init(SCHEDULER_MANAGER_PID) end)),
+	register(?FSM_PID, spawn_link(fun() -> fsm:start(SCHEDULER_MANAGER_PID) end)),
 	
 	spawn_link (fun() -> button_light_manager([],ElevID) end),
+
+	%register (?NETWORK_MONITOR_PID, spawn_link(fun() -> network_monitor([],ElevID) end)),
 
 	process_supervisor(ElevID).
 
@@ -30,37 +35,45 @@ process_supervisor(ElevID) ->
 	
 	receive
 
-		{'EXIT', _, _} ->
-				% Some process is dead, killing and restarting all.
+		{'EXIT', Pid, Reason} ->
+				io:format("ERROR, ~p HAS CRASHED WITH REASON: ~p~n!",[Pid,Reason]),
+				io:format("Restarting.~n"),	
 				spawn(fun() -> init(ElevID) end),
 				exit(self(),kill)
 
 	end.
 
 
-update_orderlist(NodeName) ->
+
+update_orderlist_and_statuslist(NodeName) ->
 	try 
 		case global:whereis_name(list_to_atom(NodeName)) of
 				undefined -> throw(node_not_found);
-				NodePID   -> throw(NodePID)
+				NodePID   -> throw(NodePID);
+				_ -> throw(node_not_found)
 	end
 	catch
 		throw:node_not_found -> 
-			ok;
-		throw:PID ->
+			io:format("ERROR: NodeName was not found~n");
 
+		throw:PID ->
 			PID ! {get_all_orders, self()},
+			io:format("Waiting for orders...~n"),
 			receive 
 				{all_orders, Orders} ->
-					?ORDERLIST_HANDLER_PID ! {add_all_orders, Orders}
-			end
+					?ORDERLIST_HANDLER_PID ! {add_all_orders, Orders},
+					io:format("Got Orders: ~p~n",[Orders])
+			end,
+			io:format("UPDATED LISTS~n")
 	end.
+
 
 
 scheduler_manager_init(ElevID) ->
 
 	receive
 		{floor_reached, Floor} ->
+			io:format("asdasidaioasjioasi~n"),
 			?FSM_PID ! {stop_at_floor},
 			?STATUSLIST_HANDLER_PID ! {update_floor, Floor},
 			?STATUSLIST_HANDLER_PID ! {update_direction, 0}
@@ -88,6 +101,7 @@ scheduler_manager(ElevID) ->
 					?ORDERLIST_HANDLER_PID	! {remove_order, Floor, ElevID, ?LOCAL},
 					?STATUSLIST_HANDLER_PID ! {update_state, open_doors};
 				no_orders_available ->
+					io:format("We are running when there are no more orders, lets stop.~n"),
 					?FSM_PID ! {stop_at_floor},
 					?STATUSLIST_HANDLER_PID ! {update_state, open_doors}
 			end;
@@ -131,12 +145,14 @@ driver_manager(SCHEDULER_MANAGER_PID, ElevID) ->
 		{floor_reached, Floor} ->
 
 			elev_driver:set_floor_indicator(Floor),
+			io:format("Passing floor: ~p~n",[Floor]),
 			SCHEDULER_MANAGER_PID  ! {floor_reached, Floor},
 			?ORDERLIST_HANDLER_PID ! {increment_waiting_time, ?LOCAL};	
 
 
 		{new_order, Direction, Floor} ->
 
+			io:format("New order received ~n"),
 			case Direction of 
 				command ->
 					NewOrder = #orders{floor=Floor,direction=Direction, assignedElevID = ElevID, waitingTime = 0};
