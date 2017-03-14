@@ -47,19 +47,18 @@ foreach_button(FunctionForeachButton) ->
 %% Call backs
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 new_order(Listener, Direction, Floor) -> Listener ! {new_order, Direction, Floor}.
-%floor_reached(Listener) -> Listener ! floor_reached.
 floor_reached(Listener, Floor) -> Listener ! {floor_reached, Floor}.
 
 %% Process functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 start(Listener, ElevatorType) ->
-    spawn(fun() -> init_port("../driver/elev_port", Listener) end),
+    spawn_link(fun() -> init_port("../driver/elev_port", Listener) end),
     timer:sleep(10),
     init(ElevatorType),
-    spawn(fun() -> floor_sensor_poller(Listener, -1) end),
+    spawn_link(fun() -> floor_sensor_poller(Listener, -1) end),
     foreach_button(fun(Floor, Direction) ->
-			   spawn(fun() -> order_button_poller(Listener, Floor, Direction, 0) end)
+			   spawn_link(fun() -> order_button_poller(Listener, Floor, Direction, 0) end)
 		   end).
 
 stop() ->

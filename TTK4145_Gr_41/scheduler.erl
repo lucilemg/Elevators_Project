@@ -1,40 +1,42 @@
 -module(scheduler).
 
--export([start/0, statuslist_handler/1, orderlist_handler/1, receive_action/1, get_all_orders/0, get_statuses/0]).
+-export([init_listhandlers/0, receive_action/1, get_all_orders/0, get_status/0]).
 -include("records.hrl").
 
 
-start() ->
-	%SCHED_LISTENER_PID = spawn (fun() -> scheduler_listener([],[]) end),
-	%spawn(fun() -> scheduler() end)
-	ok.
+init_listhandlers() ->
+
+	ElevStatus = #elevatorStatus{direction = down, lastFloor = -1, state = init},
+	register(?STATUSLIST_HANDLER_PID, spawn_link (fun() -> statuslist_handler(ElevStatus) end)),
+	register(?ORDERLIST_HANDLER_PID,  spawn_link (fun() -> orderlist_handler([]) end)).
 
 
 receive_action(ElevID) ->
-	CurrentStatuses = get_statuses(),
-	OptimalOrder = get_optimal_order(CurrentStatuses, ElevID),
+	CurrentStatus = get_status(),
+	OptimalOrder = get_optimal_order(CurrentStatus, ElevID),
 
-	%io:format("Optimal order is now: ~p~n",[OptimalOrder]), 
-
- 	CurrentFloor = get_floor(CurrentStatuses, ElevID),
-
-	try 
+	try
 	 	case OptimalOrder == no_order of
 	 		true 	-> throw(no_order);
-	 		_ 		-> ok
+	 		_ 		-> continue
 	 	end,
 
-		OrderFloor = lists:nth(2,OptimalOrder),
+		OrderFloor 	 = lists:nth(2,OptimalOrder),
+		CurrentFloor = CurrentStatus#elevatorStatus.lastFloor,
+
 		%io:format("Found order to execute: ~p~n",[OptimalOrder]),
 
 		% Assign order to elevator, notify orderlist
-		AssignerOrderRecord = #orders{direction = lists:nth(1,OptimalOrder), floor = lists:nth(2,OptimalOrder), elevatorPID = ElevID},
-		?ORDERLIST_HANDLER_PID ! {update_order, AssignerOrderRecord, ?LOCAL},
+		AssignerOrderRecord = #orders{ direction 		= lists:nth(1,OptimalOrder), 
+									   floor 			= lists:nth(2,OptimalOrder), 
+									   assignedElevID 	= ElevID },
+
+		?ORDERLIST_HANDLER_PID ! {reassign_order, AssignerOrderRecord, ?LOCAL},
 
 		if
-		CurrentFloor < OrderFloor -> throw(order_above);
-		CurrentFloor > OrderFloor -> throw(order_below);
-		CurrentFloor == OrderFloor ->throw(order_at_floor)
+			CurrentFloor < OrderFloor -> throw(order_above);
+			CurrentFloor > OrderFloor -> throw(order_below);
+			CurrentFloor == OrderFloor ->throw(order_at_floor)
 		end
 
 	catch
@@ -55,18 +57,14 @@ receive_action(ElevID) ->
 			no_orders_available
 	end.
 
-get_floor(CurrentStatuses, ElevID) ->
-	Status = lists:keyfind(ElevID,5,CurrentStatuses), 	% Find status of wanted ElevID
-	Status#elevatorStatus.lastFloor.					% Return floor
 
-
-get_statuses() ->
-	?STATUSLIST_HANDLER_PID ! {get_statuses, self()},
+get_status() ->
+	?STATUSLIST_HANDLER_PID ! {get_status, self()},
 	receive
-		{statuses, CurrentStatuses} -> ok
+		{status, CurrentStatus} -> ok
 		% Introduce After -> throw error? In case something somehow gets stuck (fault tolerance)
 	end,
-	CurrentStatuses.
+	CurrentStatus.
 
 
 get_all_orders() ->
@@ -77,103 +75,66 @@ get_all_orders() ->
 	CurrentOrders.
 
 
-statuslist_handler(CurrentStatuses) ->
-	%io:format("My statuslist: ~p~n",[CurrentStatuses]),
+statuslist_handler(CurrentStatus) ->
 
-	%io:format("List of current statuses: ~n~p~n",[CurrentStatuses]),
-	receive 
-		{update_direction, Direction, ElevPID, SenderType} ->
-			OldStatus = lists:keyfind(ElevPID, 5, CurrentStatuses),
-			NewStatus = OldStatus#elevatorStatus{direction = Direction};
+	receive
 
-			%case SenderType of
-			%	network -> ok;
-			%		local 	-> network:broadcast({update_direction, Direction, ElevPID})
-			%end;
-
-		{update_floor, Floor, ElevPID, SenderType} ->
-			OldStatus = lists:keyfind(ElevPID, 5, CurrentStatuses),
-			NewStatus = OldStatus#elevatorStatus{lastFloor = Floor};
-
-			% case SenderType of
-			% 	network -> ok;
-			% 	local 	-> network:broadcast({update_floor, Floor, ElevPID})
-			% end;
-
-		{update_state, State, ElevPID, SenderType} ->
-			OldStatus = lists:keyfind(ElevPID, 5, CurrentStatuses),
-			NewStatus = OldStatus#elevatorStatus{state = State};		
-
-			% case OldStatus == NewStatus of
-			% 	true -> ok;
-			% 	_ -> case SenderType of
-			% 			network -> ok;
-			% 			local 	-> network:broadcast({update_state, State, ElevPID})
-			% 		end
-			% end;
+		{update_floor, Floor} ->
+			NewStatus = CurrentStatus#elevatorStatus{lastFloor = Floor};
 
 
-		{get_statuses, CallerPID} ->
-			OldStatus = undefined,
-			NewStatus = undefined,
-			CallerPID ! {statuses, CurrentStatuses}
+		{update_direction, Direction} ->
+			NewStatus = CurrentStatus#elevatorStatus{direction = Direction};
 
 
-		% {update_all_statuses, Statuses} ->
-		% 	OldStatus = undefined,
-		% 	NewStatus = Statuses;
+		{update_state, State} ->
+			NewStatus = CurrentStatus#elevatorStatus{state = State};		
 
-		% {remove_status, Status} ->
-		% %REMOVE THIS REMOVE; MAKE THINGS BETTER
-		% 	OldStatus = undefined,
-		% 	NewStatus = lists:delete(Status, CurrentStatuses)
+
+		{get_status, CallerPID} ->
+			NewStatus = CurrentStatus,
+			CallerPID ! {status, CurrentStatus}
 
 	end,
-	case NewStatus of
-		undefined ->
-			statuslist_handler(CurrentStatuses);
-		_ ->
-			NewStatuses = lists:delete(OldStatus,CurrentStatuses) ++ [NewStatus],
-			statuslist_handler(NewStatuses)
-	end.
+	statuslist_handler(NewStatus).
 
 
 orderlist_handler(CurrentOrders) ->
 	%io:format("~n### ALL CURRENT ORDERS: ~p~n",[CurrentOrders]),
 	receive
+
 		{add_order, NewOrder, SenderType} ->
 
-			NewOrders = try case length(CurrentOrders) of
-				0 -> throw(order_is_new);
-				_ ->
-					lists:foreach(fun(N) ->
-					
-					case ((N#orders.floor == NewOrder#orders.floor) 
-						and (N#orders.direction == NewOrder#orders.direction)) of
-						true ->
-							case N#orders.direction of
-								command -> 
-									case N#orders.elevatorPID == NewOrder#orders.elevatorPID of
-										true ->
-											throw(order_is_duplicate);
-										_ -> ok
-									end;
+			NewOrders = try 
+				case length(CurrentOrders) of
+					0 -> throw(order_is_new);
+					_ ->
+						% Checks if order is duplicate
+						lists:foreach(fun(N) ->
+						case   ((N#orders.floor == NewOrder#orders.floor) 
+							and (N#orders.direction == NewOrder#orders.direction)) of
+							true ->
+								case N#orders.direction of
+									command -> 
 
-								_ ->
-									throw(order_is_duplicate)
-							end;
-						_ ->
-						 	ok
-					end,
+										case N#orders.assignedElevID == NewOrder#orders.assignedElevID of
+											true -> throw(order_is_duplicate);
+											_    -> ok
+										end;
 
-					case N == lists:last(CurrentOrders) of
-						true ->
-							throw(order_is_new);
-						_ ->
-							ok
-					end
+									_ -> throw(order_is_duplicate)
+
+								end;
+							_ ->
+							 	ok
+						end,
+
+						case N == lists:last(CurrentOrders) of
+							true -> throw(order_is_new);
+							_    ->	ok
+						end
 					
-				end, CurrentOrders)
+						end, CurrentOrders)
 				end
 
 			catch
@@ -182,61 +143,39 @@ orderlist_handler(CurrentOrders) ->
 
 				throw:order_is_new ->
 					case SenderType of
-						network -> okd;
+						network -> ok;
 						local -> network:broadcast({add_order, NewOrder})
 					end,
-					io:format("Orders after adding new: ~n~p~n",[CurrentOrders ++ [NewOrder]]),
+					%io:format("Orders after adding new: ~n~p~n",[CurrentOrders ++ [NewOrder]]),
 					CurrentOrders ++ [NewOrder]
-					%CurrentOrders
 			end;		
 
 		{remove_order, Floor, ElevID, SenderType} ->
-			io:format("PRE REMOVAL: list of current orders: ~n~p~n",[CurrentOrders]),
-
-
-			%io:format("Attempting remove of orders at floor ~p~n",[Floor]),
-			OldOrderCommand = #orders{direction = command, floor = Floor, elevatorPID = ElevID},
-			OldOrderUp		= #orders{direction = up, floor = Floor, elevatorPID = ElevID},
-			OldOrderDown	= #orders{direction = down, floor = Floor, elevatorPID = ElevID},
-			
-			%io:format("order founda? : ~p~n",[lists:keyfind(ElevID,4,CurrentOrders)]),
-
-			WithoutCommand = lists:delete(OldOrderCommand, CurrentOrders),
-			WithoutUpAndCommand = lists:delete(OldOrderUp, WithoutCommand),
-			WithoutUpDownAndCommand = lists:delete(OldOrderDown, WithoutUpAndCommand),
-
-			NewOrders = WithoutUpDownAndCommand,
+			%io:format("PRE REMOVAL: list of current orders: ~n~p~n",[CurrentOrders]),
+			NewOrders = remove_orders_at_floor(length(CurrentOrders),CurrentOrders,Floor,ElevID),
 
 			case SenderType of
 				network -> ok;
 				local -> network:broadcast({remove_order, Floor, ElevID})
 			end;
 
-
-		{update_order, Order, SenderType} ->
+		{reassign_order, Order, SenderType} ->
 			%io:format("Upd: List of current orders: ~n~p~n",[CurrentOrders]),
-
-			% Something happening when orders are reassigned, meaning the cost function 
-			% has calculated
 			NewOrders = try case length(CurrentOrders) of
-				0 ->
-					throw(order_not_found);
+				0 -> throw(order_not_found);
 				_ -> ok
 				end,
 
-				lists:foreach(fun(N) -> 
-				case ((Order#orders.direction == N#orders.direction) and (Order#orders.floor == N#orders.floor)) of
-					true ->
-						%io:format("Assinging new elevator to order: ~p~n",[N]),
-						throw(N);
-					false ->
-						ok
+				lists:foreach(fun(OldOrder) -> 
+
+				case ((Order#orders.direction == OldOrder#orders.direction) 
+					and (Order#orders.floor == OldOrder#orders.floor)) of
+					true  -> throw(OldOrder);
+					false -> ok
 				end,
-				case N == lists:last(CurrentOrders) of
-					true ->
-						throw(order_not_found);
-					_ ->
-						ok
+				case OldOrder == lists:last(CurrentOrders) of
+					true  -> throw(order_not_found);
+					false -> ok
 				end
 				end, CurrentOrders)
 
@@ -244,59 +183,90 @@ orderlist_handler(CurrentOrders) ->
 					throw:order_not_found ->
 						case SenderType of
 							network -> ok;
-							local -> network:broadcast({update_order, Order})
+							local -> network:broadcast({reassign_order, Order})
 						end,
 						CurrentOrders;
 					throw:N ->
 						case SenderType of
 							network -> ok;
-							local -> network:broadcast({update_order, Order})
+							local -> network:broadcast({reassign_order, Order})
 						end,
-						NewOrder = N#orders{elevatorPID = Order#orders.elevatorPID},
+						NewOrder = N#orders{assignedElevID = Order#orders.assignedElevID},
 						lists:delete(N,CurrentOrders) ++ [NewOrder]
+			end,
+			io:format("Reassigned as: ~p~n",[NewOrders]);
+
+
+		{increment_waiting_time, SenderType} ->
+
+			NewOrders = try 
+				case length(CurrentOrders) of
+					0 -> throw(no_orders);
+					_ -> throw(ok)
+				end
+				
+				catch
+					throw:no_orders -> 
+						CurrentOrders;
+					throw:ok ->
+						case SenderType of
+							network -> ok;
+							local -> network:broadcast({increment_waiting_time})
+						end,
+						increment_waiting_time(length(CurrentOrders),CurrentOrders)
 			end;
 
 
-		{get_all_orders, CallerPID} ->
-			NewOrders = CurrentOrders,
-			CallerPID ! {all_orders, CurrentOrders};
+		{get_all_orders, CallerPID} ->	
+
+			CallerPID ! {all_orders, CurrentOrders},
+			NewOrders = CurrentOrders;
+
 
 		{add_all_orders, Orders} ->
-			NewOrders = CurrentOrders ++ Orders;
 
-		{remove_assignments, ElevID} ->
+			lists:foreach(fun(Order) ->
+				self() ! {add_order, Order, ?NETWORK},
+				io:format("addloop: ~p~n",[Order])
+			end, Orders),
+			NewOrders = CurrentOrders;
 
+
+		{remove_assignments, ElevID, SenderType} ->
+
+			% Dissociate orders assigned to unavailable elevator
 			lists:foreach(fun(N) ->
-				case N#orders.elevatorPID of
+				case N#orders.assignedElevID of
 					ElevID ->
 						case N#orders.direction of
 							command -> ok;
 							_ ->	
-								NewOrder = N#orders{elevatorPID = undefined},
-								self() ! {update_order, NewOrder, ?NETWORK}
+								NewOrder = N#orders{assignedElevID = undefined},
+								self() ! {reassign_order, NewOrder, ?NETWORK}
 						end;
 					_ ->
 						ok
 				end
 			end, CurrentOrders),
+
+			case SenderType of
+				network -> ok;
+				local 	-> network:broadcast({remove_assignments, ElevID})
+			end,
 			NewOrders = CurrentOrders
 
 	end,
 	orderlist_handler(NewOrders).
 
 
-get_optimal_order(CurrentStatuses, ElevID) ->
-	%FirstOrder = #orders{direction=1,floor=1,elevatorPID = 1},
-	%SecondOrder= #orders{direction=2,floor=3,elevatorPID = TESTER},
-	%ThirdOrder = #orders{direction=1,floor=2,elevatorPID = 2},
+get_optimal_order(Status, ElevID) ->
 
 	CurrentOrders = get_all_orders(),
-	Status = lists:keyfind(ElevID,5,CurrentStatuses),
 
-	CalculatedOrders = cost_function_loop(CurrentOrders, Status, length(CurrentOrders)),
+	CalculatedOrders = cost_function_loop(CurrentOrders, Status, ElevID, length(CurrentOrders)),
 
-	% Sort by lowest cost
-	F = fun(X,Y) -> lists:nth(4,X) < lists:nth(4,Y) end,
+	% Sorts by lowest cost
+	F = fun(X,Y) -> lists:nth(5,X) < lists:nth(5,Y) end,
 	SortedList = lists:sort(F,CalculatedOrders),
 
 	try
@@ -305,45 +275,45 @@ get_optimal_order(CurrentStatuses, ElevID) ->
 			_ -> throw(order_found)
 		end
 	catch
-		throw:no_order ->
-			no_order;
-		throw:order_found ->
-			lists:nth(1,SortedList)
+		throw:no_order 	  -> no_order;
+		throw:order_found -> lists:nth(1,SortedList)
 	end.
 
 
-cost_function_loop(Orders, _, 0) ->
-	%io:format("Final list of orders with cost: ~p~n",[Orders]),
+cost_function_loop(Orders, _, _, 0) ->
+	%io:format("Orders with costs: ~p~n",[Orders]),
 	Orders;
-cost_function_loop(Orders, Status, N) ->
+cost_function_loop(Orders, Status, ElevID, N) ->
+	
+	io:format("STATUS: ~p~n",[Status]),
 
 	Order = lists:nth(N, Orders),
-	OrderAsList  = [Order#orders.direction, Order#orders.floor, Order#orders.elevatorPID],
+	OrderAsList  = [Order#orders.direction, Order#orders.floor, Order#orders.assignedElevID, ElevID],
 
-	ElevID = Status#elevatorStatus.fsm_PID,
 
-	try case ((Order#orders.direction == command) and (Order#orders.elevatorPID /= ElevID)) of
-		true->
-			io:format("Found command that is not for me~n"),
-			throw(ignore_order);
-		_ ->
-			throw(continue)
-	end
+	try 
+		case ((Order#orders.assignedElevID /= ElevID) 
+		  and (Order#orders.assignedElevID /= undefined)) of
+		true ->	throw(ignore_order);
+		_    ->	throw(calculate_order)
+		end
 	catch 
 		throw:ignore_order ->
-	 		cost_function_loop(lists:delete(Order,Orders),Status,N-1);
-	 	throw:continue ->
-			case Order#orders.elevatorPID of
+	 		cost_function_loop(lists:delete(Order,Orders), Status, ElevID, N-1);
+
+	 	throw:calculate_order ->
+
+	 		WaitTime = Order#orders.waitingTime,
+
+			case Order#orders.assignedElevID of
 				undefined ->
 					AvailabilityCost = 1;
-				ElevID ->
-					AvailabilityCost = 0;
-				_ ->
-					AvailabilityCost = 20
+				_  ->
+					AvailabilityCost = 0
 			end,
 
-			case ((Order#orders.floor == Status#elevatorStatus.lastFloor) and (((Order#orders.direction == up) and (Status#elevatorStatus.direction == down)) 
-				or ((Order#orders.direction == down) and (Status#elevatorStatus.direction == up)))) of
+			case   ((Order#orders.direction == up)   and (Status#elevatorStatus.direction == down)
+				or ((Order#orders.direction == down) and (Status#elevatorStatus.direction == up))) of
 				true ->
 					DirectionCost = 1;
 				false ->
@@ -353,12 +323,39 @@ cost_function_loop(Orders, Status, N) ->
 			DistanceCost = abs(Order#orders.floor - Status#elevatorStatus.lastFloor),
 
 
-			TotalCost = DirectionCost*?NUMBER_OF_FLOORS + DistanceCost*?NUMBER_OF_FLOORS*1.5 + AvailabilityCost,
+			TotalCost = DistanceCost*?NUMBER_OF_FLOORS*2.5 
+					  + DirectionCost*?NUMBER_OF_FLOORS*3 
+					  + AvailabilityCost*3 
+					  - WaitTime*2,
+
 
 			CalculatedOrder = OrderAsList ++ [TotalCost],
 			NewOrders = lists:delete(Order,Orders) ++ [CalculatedOrder],
-			cost_function_loop(NewOrders, Status, N-1)
+			cost_function_loop(NewOrders, Status, ElevID, N-1)
 
 	end.
 
-	
+
+
+increment_waiting_time(0, OrderList) ->
+	lists:reverse(OrderList);
+increment_waiting_time(N, OrderList) ->
+	OldOrder = lists:nth(N,OrderList),
+	OldWaitingTime = OldOrder#orders.waitingTime,
+	NewOrder = OldOrder#orders{waitingTime = OldWaitingTime + 1},
+
+	NewList = lists:delete(OldOrder,OrderList) ++ [NewOrder],
+	increment_waiting_time(N-1,NewList).
+
+
+remove_orders_at_floor(0, OrderList, _, _) ->
+	OrderList;
+remove_orders_at_floor(N, OrderList, Floor, ElevID) ->
+	OldOrder = lists:nth(N,OrderList),
+	case   ((OldOrder#orders.floor == Floor) 
+	    and (OldOrder#orders.assignedElevID == ElevID)) of
+		true -> OrderToRemove = OldOrder;
+		false -> OrderToRemove = undefined
+	end,
+	NewList = lists:delete(OrderToRemove,OrderList),
+	remove_orders_at_floor(N-1,NewList,Floor,ElevID).

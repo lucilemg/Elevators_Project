@@ -12,9 +12,8 @@ state_init(SCHEDULER_PID) ->
 
 	io:format("State is init~n"),
 	elev_driver:set_motor_direction(down),
-	io:format("Waiting to receive...~n"),
 	receive
-		{floor_reached} -> 
+		{stop_at_floor} -> 
 			io:format("Entering idle state~n"),
 			state_idle(SCHEDULER_PID)
 	end.
@@ -41,7 +40,7 @@ state_running(SCHEDULER_PID) ->
 	io:format("State is running~n"),
 
 	receive
-		{destination_floor_reached} ->
+		{stop_at_floor} ->
 			% Sent from scheduler when a floor_reached event
 			% is triggered and the elevator is set to execute
 			% an order at that floor.
@@ -49,6 +48,14 @@ state_running(SCHEDULER_PID) ->
 		{next_direction, Direction} ->
 			elev_driver:set_motor_direction(Direction),
 			state_running(SCHEDULER_PID)
+	after 10000 ->
+			io:format("Timeout from moving between floors~n"),
+			SCHEDULER_PID ! {running_timeout},
+			receive 
+				{retry} ->
+					state_running(SCHEDULER_PID)
+			end
+
 	end.
 
 state_doors_open(SCHEDULER_PID) ->
