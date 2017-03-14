@@ -44,6 +44,7 @@ init_listener(Name, ElevID) ->
 
 connection_loop() ->
 
+	io:format("Checking connections...~n"),
 	net_adm:world_list(?IPList,verbose),
 	timer:sleep(5000),
 	connection_loop().
@@ -98,5 +99,6 @@ broadcast(Message) ->
 	lists:foreach(fun(Node) -> 
 
 			NodeName = lists:sublist(atom_to_list(Node),5),
+			io:format("Broadcast: NodeName = ~p~n",[NodeName]),
 			(global:whereis_name(list_to_atom(NodeName))) ! Message
 			end, RecipientsIPs).

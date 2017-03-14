@@ -25,9 +25,11 @@ init(ElevID) ->
 	
 	spawn_link (fun() -> button_light_manager([],ElevID) end),
 
-	spawn_link (fun() -> process_supervisor(ElevID) end),
 
-	register (?NETWORK_MONITOR_PID, network_monitor([],ElevID)).
+	register (?NETWORK_MONITOR_PID, spawn_link(fun() -> network_monitor([],ElevID) end)),
+
+	process_supervisor(ElevID).
+
 
 
 process_supervisor(ElevID) ->
@@ -83,7 +85,7 @@ update_orderlist_and_statuslist(NodeName) ->
 	try 
 		case global:whereis_name(list_to_atom(NodeName)) of
 				undefined -> throw(node_not_found);
-				NodePID       -> throw(NodePID)
+				NodePID   -> throw(NodePID)
 	end
 	catch
 		throw:node_not_found -> 
@@ -144,7 +146,6 @@ scheduler_manager(ElevID) ->
 			?STATUSLIST_HANDLER_PID ! {update_state, idle},
 			NextAction = scheduler:receive_action(ElevID),
 			?FSM_PID ! {execute_action, NextAction},
-			io:format("action for idle: ~p~n",[NextAction]),
 			case NextAction of 
 				move_up ->
 					?STATUSLIST_HANDLER_PID ! {update_direction,  up},

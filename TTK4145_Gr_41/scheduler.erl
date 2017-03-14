@@ -285,8 +285,6 @@ cost_function_loop(Orders, _, _, 0) ->
 	Orders;
 cost_function_loop(Orders, Status, ElevID, N) ->
 	
-	io:format("STATUS: ~p~n",[Status]),
-
 	Order = lists:nth(N, Orders),
 	OrderAsList  = [Order#orders.direction, Order#orders.floor, Order#orders.assignedElevID, ElevID],
 
